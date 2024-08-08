@@ -1,5 +1,5 @@
-# Terraformのインストール
-
+# ■ インストール
+## Terraformのインストール
 
 https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli
 
@@ -38,7 +38,24 @@ terraform -install-autocomplete
 source ~/.bashrc
 ```
 
-# kubectlのインストール
+## awscliのインストール
+
+https://docs.aws.amazon.com/ja_jp/cli/latest/userguide/getting-started-install.html
+
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+```
+
+completion の設定
+
+```bash
+echo "complete -C '/usr/local/bin/aws_completer' aws" >> ~/.bashrc
+source ~/.bashrc
+```
+
+## kubectlのインストール
 
 ```bash
 curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
@@ -46,8 +63,21 @@ chmod +x ./kubectl
 sudo mv ./kubectl /usr/local/bin/kubectl
 ```
 
+completionの設定
 
-# デプロイ
+```bash
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+source ~/.bashrc
+```
+
+## k9sのインストール
+
+```bash
+sudo snap install k9s --devmode
+```
+
+
+# ■ デプロイ
 
 ## EKS クラスタ
 
