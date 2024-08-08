@@ -37,3 +37,28 @@ completionの設定
 terraform -install-autocomplete
 source ~/.bashrc
 ```
+
+# kubectlのインストール
+
+```bash
+curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
+chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
+```
+
+
+# デプロイ
+
+## EKS クラスタ
+
+```bash
+terraform -chdir=sample/envs/dev/cluster init
+terraform -chdir=sample/envs/dev/cluster plan
+terraform -chdir=sample/envs/dev/cluster apply -auto-approve
+```
+
+
+```bash
+CLUSTER_NAME=tutorial-mido-dev
+aws eks update-kubeconfig --name $CLUSTER_NAME
+```
