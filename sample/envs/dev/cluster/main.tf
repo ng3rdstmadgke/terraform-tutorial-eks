@@ -48,8 +48,12 @@ locals {
 
 }
 
-// terraform-aws-modules/vpc/aws
-//   - https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest
+/**
+ * VPC作成
+ *
+ * terraform-aws-modules/vpc/aws | Terraform
+ * https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest
+ */
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
   version = "~> 5.8.1"
@@ -76,7 +80,12 @@ module "vpc" {
 }
 
 
-// terraform-aws-modules/eks/aws: https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest
+/**
+ * EKSクラスタ作成
+ *
+ * terraform-aws-modules/eks/aws | Terraform
+ * https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest
+ */
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.22.0"
@@ -106,11 +115,11 @@ module "eks" {
 
 /**
  * IAMユーザー・ロールにkubernetesAPIへのアクセス権限を付与
- * - aws_eks_access_entry
- *   https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry
  * - EKS アクセスエントリを使用して Kubernetes へのアクセスを IAM ユーザーに許可する | AWS
  *   https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-entries.html
  */
+// aws_eks_access_entry | Terraform
+// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry
 resource "aws_eks_access_entry" "admin" {
   for_each = toset(var.access_entries)
   cluster_name      = local.cluster_name
@@ -118,6 +127,8 @@ resource "aws_eks_access_entry" "admin" {
   type              = "STANDARD"
 }
 
+// aws_eks_access_policy_association | Terraform
+// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_policy_association
 resource "aws_eks_access_policy_association" "admin" {
   for_each = toset(var.access_entries)
   cluster_name  = local.cluster_name
@@ -146,6 +157,8 @@ module node_group_1 {
 
 /**
  * アドオン
+ *
+ * aws_eks_addon | Terraform
  * https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon
  */
 resource "aws_eks_addon" "coredns" {
