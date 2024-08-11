@@ -1,7 +1,6 @@
 variable app_name {}
 variable stage {}
 variable cluster_name {}
-
 variable ingress_cidr_blocks {
   type = list(string)
   default = ["0.0.0.0/0"]
