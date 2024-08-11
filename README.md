@@ -87,6 +87,14 @@ terraform -chdir=sample/envs/dev/cluster plan
 terraform -chdir=sample/envs/dev/cluster apply -auto-approve
 ```
 
+## チャート
+
+```bash
+terraform -chdir=sample/envs/dev/charts init
+terraform -chdir=sample/envs/dev/charts plan
+terraform -chdir=sample/envs/dev/charts apply -auto-approve
+```
+
 
 ```bash
 CLUSTER_NAME=tutorial-mido-dev
