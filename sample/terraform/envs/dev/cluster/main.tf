@@ -45,7 +45,10 @@ locals {
     "10.60.102.0/24",
     "10.60.103.0/24",
   ]
+}
 
+output cluster_name {
+  value = local.cluster_name
 }
 
 /**

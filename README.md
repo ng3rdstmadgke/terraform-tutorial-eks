@@ -105,31 +105,56 @@ terraform -chdir=terraform/envs/dev/charts plan
 terraform -chdir=terraform/envs/dev/charts apply -auto-approve
 ```
 
-# ■ サンプルアプリデプロイ
+# ■ keycloak
+
+## デプロイ
+
+```bash
+terraform -chdir=terraform/envs/dev/keycloak init
+terraform -chdir=terraform/envs/dev/keycloak plan
+terraform -chdir=terraform/envs/dev/keycloak apply -auto-approve
+```
 
 ```bash
 # マニフェスト生成
-bash scripts/sample-app/apply.sh
+bash scripts/keycloak/apply.sh
 
 # デプロイ
-kubectl apply -f scripts/sample-app/tmp/app.yaml
-
-# 削除
-kubectl delete -f scripts/sample-app/tmp/app.yaml
+kubectl apply -f scripts/keycloak/tmp/app.yaml
 ```
 
-負荷試験
+keycloakはデフォルトでhttpでログインできないので、ログインできるように設定する
 
 ```bash
-# 確認
-watch -n1 kubectl get all
+# k9sでkeycloak コンテナのshellを起動
+k9s
 
-# 負荷コンテナ
-kubectl run \
-  -i \
-  --tty load-generator \
-  --rm \
-  --image=busybox:1.28 \
-  --restart=Never \
-  -- /bin/sh -c "while sleep 0.01; do wget -q -O- 'http://ingress-test-svc/' > /dev/null; done"
+# SecretsManager (/<app_name>/<ステージ>/keycloak) のユーザー名とパスワードでログイン
+$ /opt/keycloak/bin/kcadm.sh config credentials \
+    --server http://localhost:8080 \
+    --realm master \
+    --user ユーザー名 \
+    --password パスワード
+
+# sslRequiredを無効化
+$ /opt/keycloak/bin/update realms/master -s sslRequired=NONE
+```
+
+ALBのエンドポイントにアクセスしてログインできることを確認します。
+
+
+
+## 削除
+
+```bash
+# 削除
+kubectl delete -f scripts/keycloak/tmp/app.yaml
+```
+
+# ■ 削除
+
+```bash
+terraform -chdir=terraform/envs/dev/keycloak delete -auto-approve
+terraform -chdir=terraform/envs/dev/charts delete -auto-approve
+terraform -chdir=terraform/envs/dev/cluster delete -auto-approve
 ```
