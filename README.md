@@ -82,17 +82,27 @@ sudo snap install k9s --devmode
 ## EKS クラスタ
 
 ```bash
-terraform -chdir=sample/terraform/envs/dev/cluster init
-terraform -chdir=sample/terraform/envs/dev/cluster plan
-terraform -chdir=sample/terraform/envs/dev/cluster apply -auto-approve
+cd sample
+terraform -chdir=terraform/envs/dev/cluster init
+terraform -chdir=terraform/envs/dev/cluster plan
+terraform -chdir=terraform/envs/dev/cluster apply -auto-approve
 ```
 
 ## チャート
 
 ```bash
-terraform -chdir=sample/terraform/envs/dev/charts init
-terraform -chdir=sample/terraform/envs/dev/charts plan
-terraform -chdir=sample/terraform/envs/dev/charts apply -auto-approve
+cd sample
+terraform -chdir=terraform/envs/dev/charts init
+terraform -chdir=terraform/envs/dev/charts plan
+terraform -chdir=terraform/envs/dev/charts apply -auto-approve
+```
+
+## テストアプリ
+
+```bash
+cd sample
+kubectl apply -f scripts/app/app.yaml
+kubectl delete -f scripts/app/app.yaml
 ```
 
 
