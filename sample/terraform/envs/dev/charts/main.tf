@@ -84,3 +84,7 @@ module albc {
 module hpa {
   source = "../../../modules/hpa"
 }
+
+module secret_store_csi_driver {
+  source = "../../../modules/secret-store-csi-driver"
+}
