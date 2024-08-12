@@ -80,3 +80,7 @@ module albc {
   stage = local.stage
   cluster_name = local.cluster_name
 }
+
+module hpa {
+  source = "../../../modules/hpa"
+}

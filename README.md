@@ -79,34 +79,57 @@ sudo snap install k9s --devmode
 
 # ■ デプロイ
 
+```bash
+cd sample
+```
+
 ## EKS クラスタ
 
 ```bash
-cd sample
 terraform -chdir=terraform/envs/dev/cluster init
 terraform -chdir=terraform/envs/dev/cluster plan
 terraform -chdir=terraform/envs/dev/cluster apply -auto-approve
-```
-
-## チャート
-
-```bash
-cd sample
-terraform -chdir=terraform/envs/dev/charts init
-terraform -chdir=terraform/envs/dev/charts plan
-terraform -chdir=terraform/envs/dev/charts apply -auto-approve
-```
-
-## テストアプリ
-
-```bash
-cd sample
-kubectl apply -f scripts/app/app.yaml
-kubectl delete -f scripts/app/app.yaml
 ```
 
 
 ```bash
 CLUSTER_NAME=tutorial-mido-dev
 aws eks update-kubeconfig --name $CLUSTER_NAME
+```
+
+## チャート
+
+```bash
+terraform -chdir=terraform/envs/dev/charts init
+terraform -chdir=terraform/envs/dev/charts plan
+terraform -chdir=terraform/envs/dev/charts apply -auto-approve
+```
+
+# ■ サンプルアプリデプロイ
+
+```bash
+# マニフェスト生成
+bash scripts/sample-app/apply.sh
+
+# デプロイ
+kubectl apply -f scripts/sample-app/tmp/app.yaml
+
+# 削除
+kubectl delete -f scripts/sample-app/tmp/app.yaml
+```
+
+負荷試験
+
+```bash
+# 確認
+watch -n1 kubectl get all
+
+# 負荷コンテナ
+kubectl run \
+  -i \
+  --tty load-generator \
+  --rm \
+  --image=busybox:1.28 \
+  --restart=Never \
+  -- /bin/sh -c "while sleep 0.01; do wget -q -O- 'http://ingress-test-svc/' > /dev/null; done"
 ```
