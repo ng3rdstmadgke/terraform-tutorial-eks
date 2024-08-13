@@ -38,6 +38,8 @@ TerraformはawsだけでなくGCPやAzureといったマルチプラットフォ
 awsならawsプロバイダ、GCPならgoogleプロバイダといった具合に、バックエンドとなるサービスごとにプロバイダが存在し、プロバイダをインストールしていない状態では、いかなるインフラも定義することはできません。  
 ※ helmやkubernetesといったプロバイダも存在します。
 
+プロバイダの検索は [Browse Providers | Terraform Registry](https://registry.terraform.io/browse/providers) から行います。
+
 
 `terraform.required_providers` 必要なプロバイダを定義し、`provider` ブロックでインストールしたプロバイダの設定を行います。
 
@@ -310,6 +312,21 @@ retource "aws_xxxxxxxxxxx" "xxxxxxxxx" {
 }
 ```
 
+また、サードパーティー製のモジュールをプログラミング言語のライブラリのように利用することも可能です。
+
+[Modules Registry | Terraform](https://registry.terraform.io/browse/modules)
+
+```hcl
+module "iam_account" {
+  source  = "terraform-aws-modules/iam/aws//modules/iam-account"
+
+  account_alias = "awesome-company"
+
+  minimum_password_length = 37
+  require_numbers         = false
+}
+```
+
 
 ### Functions
 
@@ -345,7 +362,10 @@ true
 
 ```bash
 # プロバイダプラグインのインストールなど、terraformコマンドを利用するための初期化処理を行うコマンド
-terraform init
+# [options]
+#   -reconfigure  : バックエンドの設定を再構成し、Terraform の環境を再初期化する
+#   -migrate-state: tfstateファイルを新しいバックエンドに移行する
+terraform init [options]
 
 # 組み込み関数などの動作確認を行えるプロンプトを立ち上げるコマンド
 # 例)
@@ -358,51 +378,159 @@ terraform console
 terraform validate
 
 # tfファイルのフォーマットを行うコマンド
+# [options]
 #   -recursive: 再帰的にフォーマットできる
-terraform fmt
+terraform fmt [options]
 
 # 現在のデプロイ状況と比較し、どんなリソースが作成(削除)されるかを確認するコマンド
 terraform plan
 
 # 定義したリソースをデプロイするコマンド
+# [options]
 #   -auto-approve: インタラクティブな確認をスキップできる
 #   -target=path.to.resource: 指定したリソースのみデプロイできる
-terraform apply
+terraform apply [options]
+
+# outputブロックで定義した変数を出力するコマンド
+# [options]
+#   -raw: クォーテーションを省いたスクリプトで利用しやすい形式で出力
+terraform output [options] [出力変数名]
 
 # 定義したリソースを削除するコマンド
+# [options]
 #   -auto-approve: インタラクティブな確認をスキップできる
 #   -target=path.to.resource: 指定したリソースのみ削除できる
-terraform destroy
+terraform destroy [options]
 
 # ロックを強制解除する: https://developer.hashicorp.com/terraform/cli/commands/force-unlock
+# [options]
 #   -force: インタラクティブな確認をスキップできる
-terraform force-unlock <LOCK_ID>
+terraform force-unlock [options] <LOCK_ID>
 ```
 
 ## そのほか参考資料
 
 - [それ、どこに出しても恥ずかしくない Terraformコードになってるか？ | AWS](https://esa-storage-tokyo.s3-ap-northeast-1.amazonaws.com/uploads/production/attachments/5809/2023/07/07/19598/c89126e6-8d48-4e34-a654-6fd29b63756e.pdf)
 
-# ■ 1. ディレクトリ作成
+# ■ 1. 環境構築
 
-プロジェクトのディレクトリを作成しましょう。 terraformリソースは `terraform/` ディレクトリ配下に定義します。
+## Terraformのインストール
+
+https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli
+
+```bash
+sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+
+# HashiCorp GPG キーをインストール
+wget -O- https://apt.releases.hashicorp.com/gpg | \
+gpg --dearmor | \
+sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+
+# GPGキーのフィンガープリントを確認
+gpg --no-default-keyring \
+--keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+--fingerprint
+
+# HashiCorp リポジトリをシステムに追加
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
+sudo tee /etc/apt/sources.list.d/hashicorp.list
+
+# HashiCorp リポジトリのパッケージ情報を更新
+sudo apt update
+
+# terraformをインストール
+sudo apt-get install terraform
+
+# 確認
+terraform version
+```
+
+completionの設定
+
+```bash
+terraform -install-autocomplete
+source ~/.bashrc
+```
+
+## awscliのインストール
+
+https://docs.aws.amazon.com/ja_jp/cli/latest/userguide/getting-started-install.html
+
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+```
+
+completion の設定
+
+```bash
+echo "complete -C '/usr/local/bin/aws_completer' aws" >> ~/.bashrc
+source ~/.bashrc
+```
+
+## kubectlのインストール
+
+```bash
+curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
+chmod +x ./kubectl
+sudo mv ./kubectl /usr/local/bin/kubectl
+```
+
+completionの設定
+
+```bash
+echo "source <(kubectl completion bash)" >> ~/.bashrc
+source ~/.bashrc
+```
+
+## k9sのインストール
+
+```bash
+sudo snap install k9s --devmode
+```
+
+
+# ■ 2. ディレクトリ作成
+
+
+## プロジェクトディレクトリの作成
+
+今後、チュートリアルのソースはすべて `tutorial` ディレクトリ配下に配置します。  
+
+
+```bash
+mkdir tutorial
+cd tutorial
+```
 
 ## ディレクトリ構成
 
+- `scripts/`
+  - `keycloak/` : keycloakをEKSに構築するためのマニフェストファイルなど
 - `terraform/`
-  - `envs/`
-    dev, stg, prd など、環境毎にディレクトリを切る
-  - `modules/`
-    サービス毎・ライフサイクル毎にある程度リソースをグループ化したモジュールを配置
+  - `envs/` : dev, stg, prd など、各環境のリソース作成のエントリーポイントとなるディレクトリを格納
+    - `dev/`
+      - `cluster/` : EKSクラスタを定義
+      - `charts/` : Helmでインストールするチャートを定義
+      - `keycloak/` : EKS上で動かすkeycloakの関連リソースを定義
+  - `modules/` : サービス毎・ライフサイクル毎にある程度リソースをグループ化したモジュールを配置
+    - `albc/` : AWS Load Balancer Controllerのインストールと関連リソース定義
+    - `hpa/` : metrics-serverをインストール
+    - `node-group/` : EKSのノードグループを定義
+    - `secret-store-csi-driver/` : secret-store-csi-driver のインストールと関連リソースの定義
 
 ```bash
-STAGE="ステージ名"
-
 # プロジェクトディレクトリ作成
-mkdir -p "$CONTAINER_PROJECT_ROOT/terraform/envs/${STAGE}" "$CONTAINER_PROJECT_ROOT/terraform/modules"
+mkdir -p scripts/keycloak
+mkdir -p terraform/envs/dev/{cluster,charts,keycloak}
+mkdir -p terraform/modules/{albc,hpa,node-group,secret-store-csi-driver}
 ```
 
 ## .gitignore配置
+
+[Terraform.gitignore - gitignore | Github](https://github.com/github/gitignore/blob/main/Terraform.gitignore)
 
 ```bash
 cat <<EOF > terraform/.gitignore
@@ -431,6 +559,9 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 
+# Ignore transient lock info files created by terraform apply
+.terraform.tfstate.lock.info
+
 # Include override files you do wish to add to version control using negated pattern
 # !example_override.tf
 
@@ -440,189 +571,136 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
-
-**/*.auto.tfvars
 EOF
 ```
 
-# ■ 2. プロバイダの設定
+# ■ 3. 最初のterraformコード
 
-今回作成するリソースはすべてAWSのリソースであるため、 `hashicorp/aws` プロバイダプラグインをインストールして、それを利用できるように設定していきます。  
-terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。  
-また、terraformでは環境に対して同時に操作を行うと環境が壊れてしまうため、 `terraform.tfstate` にロック機構を設けることで環境に同時に操作が行われることを防止します。このロックはDynamoDBで管理します。
+最初のリソースとして [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用してVPCを作成してみましょう。 
 
-- [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-
-```bash
-touch ${CONTAINER_PROJECT_ROOT}/terraform/envs/${STAGE}/main.tf
-```
+## tfstateとプロバイダの設定
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/${STAGE}/main.tf`
+- `terraform`
+  - `required_version`  
+  インストールしてあるTerraformのバージョンを指定します。 ( `terraform --version` )
+  - `backend`  
+  terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。
+  - `required_providers`  
+  利用するプロバイダを指定します。今回は [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を設定します。
+- `provider`  
+awsプロバイダの設定を記述します。
+
+`terraform/envs/dev/cluster/main.tf`
 
 ```hcl
 terraform {
-  required_providers {
-    // AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
+  required_version = "~> 1.9.4"
 
-  // terraformのバージョン指定
-  required_version = ">= 1.2.0"
-
-  // tfstateファイルをs3で管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3
   backend "s3" {
-    // tfstate保存先のs3バケットとキー
-    bucket  = "xxxxxxxxxxxx"  // EDIT: chapter0で作成したtfstate保存用バケットを指定
-    region  = "ap-northeast-1"
-    key     = "path/to/terraform.tfstate"  // EDIT: tfstateを保存するパスを指定
+    bucket = "terraform-tutorial-eks-tfstate"
+    key    = "xxxxxxxx/dev/cluster/terraform.tfstate"  // EDIT: xxxxxx に何か指定してください
+    region = "ap-northeast-1"
     encrypt = true
-    // tfstateファイルのロック情報をDynamoDBで管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
-    dynamodb_table = "xxxxxxxxxxxx"  // EDIT: chapter0で作成したtfstateロック用のDynamoDBテーブル名を指定
   }
-}
 
-provider "aws" {
-  region = "ap-northeast-1"
-
-  // すべてのリソースにデフォルトで設定するタグ
-  default_tags {
-    tags = {
-      PROJECT_NAME = "TERRAFORM_TUTORIAL_D"
+  required_providers {
+    aws = {  // AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+      source  = "hashicorp/aws"
+      version = "~> 5.61.0"
     }
   }
 }
 
-// Data Source: aws_caller_identity: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/caller_identity
-// Terraformが認可されているアカウントの情報を取得するデータソース
-data "aws_caller_identity" "self" {}
+provider "aws" {  // Configure Reference: https://registry.terraform.io/providers/hashicorp/aws/latest/docs#aws-configuration-reference
+  region = "ap-northeast-1"
+  default_tags {  // すべてのリソースに付与するタグ
+    tags = {
+      PROJECT = "TERRAFORM_TUTORIAL_EKS",
+    }
+  }
+}
+```
 
-// Data Source: aws_region: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/region
-// 現在のリージョンを取得するデータソース
-data "aws_region" "current" {}
+## ローカル変数の定義
+
+
+```hcl
+locals {
+  app_name = "tutorial-xxxxxx"  // EDIT: 重複しない任意の文字を指定してください
+  stage    = "dev"
+  cluster_name = "${local.app_name}-${local.stage}"
+  vpc_cidr = "10.61.0.0/16"  // EDIT: 重複しないCIDRを指定してください
+  private_subnets = [
+    "10.61.1.0/24",
+    "10.61.2.0/24",
+    "10.61.3.0/24",
+  ]
+  public_subnets = [
+    "10.61.101.0/24",
+    "10.61.102.0/24",
+    "10.61.103.0/24",
+  ]
+}
+```
+
+## VPCリソースの定義
+
+VPCの構築には [terraform-aws-modules/vpc/aws](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest) モジュールを利用します。  
+
+
+```hcl
+/**
+ * VPC作成
+ *
+ * terraform-aws-modules/vpc/aws | Terraform
+ * https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest
+ */
+module "vpc" {
+  source = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.8.1"
+
+  name = "${local.app_name}-${local.stage}-vpc"
+  cidr = local.vpc_cidr
+
+  azs             = ["ap-northeast-1a", "ap-northeast-1c", "ap-northeast-1d"]
+  private_subnets = local.private_subnets
+  public_subnets  = local.public_subnets
+
+  enable_nat_gateway = true   // NATゲートウェイを作成する
+  single_nat_gateway = true   // 1つのNATゲートウェイを複数のプライベートサブネットで共有する
+  enable_vpn_gateway = false  // VPNゲートウェイを利用しない
+
+  // パブリックサブネットを外部LB用に利用することをKubernetesとALBが認識できるようにするためのタグ
+  public_subnet_tags = {
+    "kubernetes.io/role/elb" = "1"
+  }
+  // プライベートネットを内部LB用に利用することをKubernetesとALBが認識できるようにするためのタグ
+  private_subnet_tags = {
+    "kubernetes.io/role/internal-elb" = "1"
+  }
+}
 ```
 
 
-# ■ 3. terraformデプロイ
+# ■ 4. terraformデプロイ
 
 現時点ではリソースは作成されませんが、一度デプロイと削除を試してみましょう。
 
 ```bash
-cd ${CONTAINER_PROJECT_ROOT}/terraform/envs/${STAGE}
-
 # 初期化
-terraform init
+terraform -chdir=terraform/envs/dev/cluster init
 
 # デプロイ内容確認
-terraform plan
+terraform -chdir=terraform/envs/dev/cluster plan
 
 # デプロイ
-terraform apply -auto-approve
-```
-
-tfstateが指定したs3バケットの指定されたキーに作成されているかを確認してみましょう。
-
-<img src="img/01/tfstate_s3_bucket.png" width="500px">
-
-
-DynamoDBにtfstateのロックレコードが生成されていることを確認してみましょう。
-
-<img src="img/01/tfstate_lock_dynamodb.png" width="500px">
-
-
-```bash
-# 削除
-terraform destroy -auto-approve
+terraform -chdir=terraform/envs/dev/cluster apply -auto-approve
 ```
 
 
-# ■ 4. baseモジュールの作成
+## 確認
 
-sns topic を作成する `base` モジュールを作成してみましょう。
-
-
-## 1. ファイル作成
-
-`base` モジュールを作成します。
-
-```bash
-STAGE="ステージ名"
-mkdir -p ${CONTAINER_PROJECT_ROOT}/terraform/modules/base
-touch ${CONTAINER_PROJECT_ROOT}/terraform/modules/base/{main.tf,variables.tf,outputs.tf}
-```
-
-## 2. リソース定義
-
-
-`terraform/modules/base/variables.tf`
-
-```hcl
-variable "app_name" {}
-variable "stage" {}
-```
-
-`terraform/modules/base/outputs.tf`
-
-```hcl
-output "sns_topic_arn" {
-  value = aws_sns_topic.this.arn
-}
-```
-
-`terraform/modules/base/main.tf`
-
-```hcl
-resource "aws_sns_topic" "this" {
-  name = "${var.app_name}-${var.stage}-topic"
-  lifecycle {
-    ignore_changes = all
-  }
-}
-```
-
-## 3. モジュールをエントリーポイントから参照
-
-モジュールに定義したリソースはエントリーポイント ( `terraform/envs/${STAGE}/main.tf` )から、関数のように呼び出すことでデプロイできます。
-
-※ `EDIT: ...` コメントの項目を各自編集してください
-
-
-```hcl
-// ... 略 ...
-
-// ローカル変数を定義
-locals {  // < 追加 >
-  aws_region      = data.aws_region.current.name
-  account_id      = data.aws_caller_identity.self.account_id
-  app_name        = replace(lower("terraformtutorial"), "-", "")
-  stage           = "ステージ名"  // EDIT: STAGEに指定した名前
-  vpc_cidr_block  = "xxx.xxx.xxx.xxx/16"  // EDIT: VPCのCIDRブロック
-  repository_name = "xxxxxxxxxxxx"  // EDIT: CodeCommitに作成したリポジトリ名
-}
-
-module "base" {  // < 追加 >
-  source = "../../modules/base"
-  app_name    = local.app_name
-  stage       = local.stage
-}
-```
-
-
-## 4. デプロイ
-
-```bash
-cd ${CONTAINER_PROJECT_ROOT}/terraform/envs/${STAGE}
-
-# 初期化
-terraform init
-
-# デプロイ内容確認
-terraform plan
-
-# デプロイ
-terraform apply -auto-approve
-```
+- tfstateが指定したs3バケットの指定されたキーに作成されているかを確認してみましょう。
+- VPCが設定どおりに構築されているか確認してみましょう。

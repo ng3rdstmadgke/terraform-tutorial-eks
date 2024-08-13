@@ -26,10 +26,6 @@ provider "aws" {
   }
 }
 
-variable access_entries {
-  type = list(string)
-}
-
 locals {
   app_name = "tutorial-mido"
   stage    = "dev"
@@ -45,6 +41,10 @@ locals {
     "10.60.102.0/24",
     "10.60.103.0/24",
   ]
+}
+
+variable access_entries {
+  type = list(string)
 }
 
 output cluster_name {
