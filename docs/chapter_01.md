@@ -625,6 +625,7 @@ provider "aws" {  // Configure Reference: https://registry.terraform.io/provider
 
 ## ローカル変数の定義
 
+`terraform/envs/dev/cluster/main.tf`
 
 ```hcl
 locals {
@@ -649,6 +650,8 @@ locals {
 
 VPCの構築には [terraform-aws-modules/vpc/aws](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest) モジュールを利用します。  
 
+
+`terraform/envs/dev/cluster/main.tf`
 
 ```hcl
 /**
