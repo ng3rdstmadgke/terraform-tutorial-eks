@@ -1,5 +1,7 @@
 # Terraform EKS チュートリアル
 
+このチュートリアルではEKSクラスタ作成から、EKS上で動作するkeycloakの作成を行います。
+
 ![](docs/drawio/architecture.drawio.png)
 
 - [Chapter1 Terraform入門](docs/chapter_01.md)

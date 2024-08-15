@@ -34,7 +34,7 @@ HCL (HashiCorp Configuration Language) はTerraformを記述するための独�
 
 - [Providers | Terraform](https://developer.hashicorp.com/terraform/language/providers)
 
-TerraformはawsだけでなくGCPやAzureといったマルチプラットフォームで利用できるツールですが、それぞれのシステムとやりとりをするために、「プロバイダ」というプラグインを利用利用します。  
+TerraformはawsだけでなくGCPやAzureといったマルチプラットフォームで利用できるツールですが、それぞれのシステムとやりとりをするために、「プロバイダ」というプラグインを利用します。  
 awsならawsプロバイダ、GCPならgoogleプロバイダといった具合に、バックエンドとなるサービスごとにプロバイダが存在し、プロバイダをインストールしていない状態では、いかなるインフラも定義することはできません。  
 ※ helmやkubernetesといったプロバイダも存在します。
 
@@ -308,13 +308,13 @@ module "some_alb" {
 
 // albモジュールが output を持つ場合は参照することができます
 retource "aws_xxxxxxxxxxx" "xxxxxxxxx" {
-  alb_arn = module.some_alb.arn
+  alb_arn = module.some_alb.some_output
 }
 ```
 
 また、サードパーティー製のモジュールをプログラミング言語のライブラリのように利用することも可能です。
 
-[Modules Registry | Terraform](https://registry.terraform.io/browse/modules)
+※ 公開されているモジュールは [Modules Registry | Terraform](https://registry.terraform.io/browse/modules) から検索します。
 
 ```hcl
 module "iam_account" {
@@ -532,8 +532,9 @@ mkdir -p terraform/modules/{albc,hpa,node-group,secret-store-csi-driver}
 
 [Terraform.gitignore - gitignore | Github](https://github.com/github/gitignore/blob/main/Terraform.gitignore)
 
-```bash
-cat <<EOF > terraform/.gitignore
+`terraform/.gitignore`
+
+```ini
 # Local .terraform directories
 **/.terraform/*
 
@@ -571,7 +572,6 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
-EOF
 ```
 
 # ■ 3. 最初のterraformコード
@@ -600,7 +600,7 @@ terraform {
 
   backend "s3" {
     bucket = "terraform-tutorial-eks-tfstate"
-    key    = "xxxxxxxx/dev/cluster/terraform.tfstate"  // EDIT: xxxxxx に何か指定してください
+    key    = "xxxxxxxx/dev/cluster/terraform.tfstate"  // EDIT: xxxxxx に重複しない任意の値を指定してください
     region = "ap-northeast-1"
     encrypt = true
   }
@@ -633,12 +633,12 @@ locals {
   stage    = "dev"
   cluster_name = "${local.app_name}-${local.stage}"
   vpc_cidr = "10.61.0.0/16"  // EDIT: 重複しないCIDRを指定してください
-  private_subnets = [
+  private_subnets = [  // EDIT: VPCのCDIRに応じて3つ指定してください
     "10.61.1.0/24",
     "10.61.2.0/24",
     "10.61.3.0/24",
   ]
-  public_subnets = [
+  public_subnets = [  // EDIT: VPCのCDIRに応じて3つ指定してください
     "10.61.101.0/24",
     "10.61.102.0/24",
     "10.61.103.0/24",
