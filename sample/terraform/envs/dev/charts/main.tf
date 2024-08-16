@@ -6,6 +6,7 @@ terraform {
     key    = "ubuntu/dev/chart/terraform.tfstate"
     region = "ap-northeast-1"
     encrypt = true
+    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {

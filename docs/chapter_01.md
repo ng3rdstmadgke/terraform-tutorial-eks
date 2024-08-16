@@ -578,6 +578,40 @@ terraform.rc
 
 最初のリソースとして [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用してVPCを作成してみましょう。 
 
+## tfstate管理用s3バケット作成
+
+terraformのtfstateを管理するS3バケットを作成します。
+
+```bash
+# tfstateファイルをS3で管理する
+# https://developer.hashicorp.com/terraform/language/settings/backends/s3
+TFSTATE_BUCKET="terraform-tutorial-eks-tfstate"
+
+aws s3api create-bucket \
+  --bucket $TFSTATE_BUCKET \
+  --region ap-northeast-1 \
+  --create-bucket-configuration LocationConstraint=ap-northeast-1
+
+```
+
+## tfstateロック用のdynamodbテーブルを作成
+
+terraformを複数個所から同時にデプロイできないように、dynamoDBにtfstateをロックするためのテーブルを作成します。
+
+```bash
+# tfstateファイルのロック情報をDynamoDBで管理する
+# https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
+
+TFSTATE_LOCK_TABLE="terraform-tutorial-eks-tfstate-lock"
+
+aws dynamodb create-table \
+    --table-name $TFSTATE_LOCK_TABLE \
+    --attribute-definitions AttributeName=LockID,AttributeType=S \
+    --key-schema AttributeName=LockID,KeyType=HASH \
+    --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
+    --region ap-northeast-1
+```
+
 ## tfstateとプロバイダの設定
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
@@ -598,11 +632,15 @@ awsプロバイダの設定を記述します。
 terraform {
   required_version = "~> 1.9.4"
 
+  // tfstateファイルをs3で管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3
   backend "s3" {
+    // tfstate保存先のs3バケットとキー
     bucket = "terraform-tutorial-eks-tfstate"
     key    = "xxxxxxxx/dev/cluster/terraform.tfstate"  // EDIT: xxxxxx に重複しない任意の値を指定してください
     region = "ap-northeast-1"
     encrypt = true
+    // tfstateファイルのロック情報をDynamoDBで管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
+    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
