@@ -15,6 +15,8 @@ locals {
   ]
 }
 
+// EKSのアクセスエントリに追加するIAMユーザまたはIAMロールのARN
 variable access_entries {
   type = list(string)
+  description = "arn:aws:iam::111111111111:user/xxxxxxxxxxxxxxxx or arn:aws:iam::111111111111:role/xxxxxxxxxxxxxxxxxxxxxxxxxxx"
 }

@@ -727,7 +727,7 @@ module "vpc" {
 
 # ■ terraformデプロイ
 
-現時点ではリソースは作成されませんが、一度デプロイと削除を試してみましょう。
+terraformを実行してVPCを作成してみましょう
 
 ```bash
 # 初期化
@@ -743,5 +743,6 @@ terraform -chdir=terraform/envs/dev/cluster apply -auto-approve
 
 ## 確認
 
+- dynamodbにロック用のレコードが登録されているか確認してみましょう。
 - tfstateが指定したs3バケットの指定されたキーに作成されているかを確認してみましょう。
 - VPCが設定どおりに構築されているか確認してみましょう。

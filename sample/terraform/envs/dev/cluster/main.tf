@@ -100,7 +100,7 @@ module "eks" {
 // aws_eks_access_entry | Terraform
 // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry
 resource "aws_eks_access_entry" "admin" {
-  for_each = toset(var.access_entries)
+  for_each = toset(var.access_entries)  // 配列はループできないのでセットに変換
   cluster_name      = local.cluster_name
   principal_arn     = each.key
   type              = "STANDARD"
@@ -119,20 +119,6 @@ resource "aws_eks_access_policy_association" "admin" {
     type       = "cluster"
   }
 }
-
-/**
- * ノードグループ
- */
-module node_group_1 {
-  source = "../../../modules/node-group"
-  app_name = local.app_name
-  stage = local.stage
-  node_group_name = "ng-1"
-  // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
-  instance_types = ["t3a.xlarge"]
-  desired_size = 1
-}
-
 
 /**
  * アドオン
@@ -174,5 +160,22 @@ resource "aws_eks_addon" "eks_pod_identity_agent" {
   addon_version = "v1.3.0-eksbuild.1"
   depends_on = [
     module.node_group_1
+  ]
+}
+
+/**
+ * ノードグループ
+ */
+module node_group_1 {
+  source = "../../../modules/node-group"
+  app_name = local.app_name
+  stage = local.stage
+  node_group_name = "ng-1"
+  // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
+  instance_types = ["t3a.xlarge"]
+  desired_size = 1
+
+  depends_on = [
+    module.eks
   ]
 }
