@@ -3,7 +3,7 @@ Chapter1 Terraform入門
 [READMEに戻る](../README.md)
 
 
-# ■ 0. Terraform入門
+# ■ Terraform入門
 
 - [Terraform公式ドキュメント](https://developer.hashicorp.com/terraform)
 
@@ -412,7 +412,7 @@ terraform force-unlock [options] <LOCK_ID>
 
 - [それ、どこに出しても恥ずかしくない Terraformコードになってるか？ | AWS](https://esa-storage-tokyo.s3-ap-northeast-1.amazonaws.com/uploads/production/attachments/5809/2023/07/07/19598/c89126e6-8d48-4e34-a654-6fd29b63756e.pdf)
 
-# ■ 1. 環境構築
+# ■ 環境構築
 
 ## Terraformのインストール
 
@@ -492,7 +492,7 @@ sudo snap install k9s --devmode
 ```
 
 
-# ■ 2. ディレクトリ作成
+# ■ ディレクトリ作成
 
 
 ## プロジェクトディレクトリの作成
@@ -574,7 +574,7 @@ override.tf.json
 terraform.rc
 ```
 
-# ■ 3. 最初のterraformコード
+# ■ 最初のterraformコード
 
 最初のリソースとして [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用してVPCを作成してみましょう。 
 
@@ -663,7 +663,7 @@ provider "aws" {  // Configure Reference: https://registry.terraform.io/provider
 
 ## ローカル変数の定義
 
-`terraform/envs/dev/cluster/main.tf`
+`terraform/envs/dev/cluster/variables.tf`
 
 ```hcl
 locals {
@@ -725,7 +725,7 @@ module "vpc" {
 ```
 
 
-# ■ 4. terraformデプロイ
+# ■ terraformデプロイ
 
 現時点ではリソースは作成されませんが、一度デプロイと削除を試してみましょう。
 
