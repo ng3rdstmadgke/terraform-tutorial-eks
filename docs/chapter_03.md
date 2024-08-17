@@ -362,8 +362,41 @@ output "alb_ingress_sg" {
 ```
 
 # ■ metrics-server をインストール
+
+Horizontal Pod Autoscaler を利用するために metrics-server をインストールします。
+
 ## モジュールの定義
+
+`terraform/modules/hpa/main.tf`
+
+```hcl
+/**
+ * metrics-serverチャートをインストールします。
+ * - Kubernetes メトリクスサーバーのインストール | AWS: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/metrics-server.html
+ * - metrics-server | ArtifactHUB: https://artifacthub.io/packages/helm/metrics-server/metrics-server
+ */
+
+//helm_release - helm - terraform: https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release
+resource "helm_release" "metrics_server" {
+  name       = "metrics-server"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = "3.12.1"
+  namespace  = "kube-system"
+  create_namespace = true
+}
+```
+
 ## モジュールの利用
+
+hpaモジュールを `terraform/envs/dev/charts/main.tf` から呼び出します。
+
+`terraform/envs/dev/charts/main.tf`
+```hcl
+module hpa {
+  source = "../../../modules/hpa"
+}
+```
 
 # ■ secrets-store-csi-driver と secrets-store-csi-driver-provider-aws をインストール
 ## モジュールの定義
