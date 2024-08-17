@@ -493,3 +493,4 @@ k9sで以下を確認します
 - kube-systemネームスペースのdeploymentに `aws-load-balancer-controller` が存在する
 - kube-systemネームスペースのdeploymentに `metrics-server` が存在する
 - kube-systemネームスペースのdaemonsetに `csi-secrets-store-secrets-store-csi-driver` `secrets-provider-aws-secrets-store-csi-driver-provider-aws` が存在する
+- aws-load-balancer-controllerサービスアカウントのAnnotationsに ` eks.amazonaws.com/role-arn: arn:aws:iam::111111111111:role/xxxxx-dev-EKSIngressAWSLoadBalancerControllerRole` が設定されている
