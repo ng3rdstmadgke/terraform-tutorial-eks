@@ -436,6 +436,8 @@ terraform -chdir=terraform/envs/dev/cluster plan
 terraform -chdir=terraform/envs/dev/cluster apply -auto-approve
 ```
 
+## 確認
+
 outputs.tfに定義したoutputを出力してみましょう
 
 ```bash
@@ -448,6 +450,7 @@ terraform -chdir=terraform/envs/dev/cluster output cluster_name
 # スクリプトで利用しやすい形で出力
 terraform -chdir=terraform/envs/dev/cluster output -raw cluster_name
 ```
+
 
 k9sでリソースを確認してみましょう
 
