@@ -140,9 +140,7 @@ resource "aws_eks_node_group" "this" {
     max_unavailable = 1
   }
 
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_node_group#tracking-the-latest-eks-node-group-ami-releases
-  // release_version = nonsensitive(aws_ssm_parameter.eks_ami_release_version.value)
-
+  // ロールは作成済みだけど、ポリシーがアタッチされていない状況が発生するので、depends_on でポリシーのアタッチを待つ
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
     aws_iam_role_policy_attachment.ec2_container_registry_read_only,

@@ -667,7 +667,7 @@ provider "aws" {  // Configure Reference: https://registry.terraform.io/provider
 
 ```hcl
 locals {
-  app_name = "tutorial-xxxxxx"  // EDIT: 重複しない任意の文字を指定してください
+  app_name = "xxxxxx  // EDIT: 重複しない任意の文字を指定してください"
   stage    = "dev"
   cluster_name = "${local.app_name}-${local.stage}"
   vpc_cidr = "10.61.0.0/16"  // EDIT: 重複しないCIDRを指定してください

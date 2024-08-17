@@ -9,7 +9,7 @@ locals {
   db_user = "admin"
   db_name = "keycloak"
   oidc_provider = replace(
-    // aws eks describe-cluster --name baseport-prd --output text --query "cluster.identity.oidc.issuer"
+    // AWS CLIで確認する場合: aws eks describe-cluster --name クラスタ名 --output text --query "cluster.identity.oidc.issuer"
     data.aws_eks_cluster.this.identity[0].oidc[0].issuer,
     "https://",
     ""

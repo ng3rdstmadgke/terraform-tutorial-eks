@@ -23,9 +23,8 @@ resource "aws_iam_role" "aws_loadbalancer_controller" {
 resource "aws_iam_policy" "aws_loadbalancer_controller" {
   name   = "${var.cluster_name}-EKSIngressAWSLoadBalancerControllerPolicy"
   // IAMを設定する - ALBCインストール | aws: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-manifest.html#lbc-iam
-  // 以下のURLの内容
-  //   - https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json
-  policy = file("${path.module}/albc_iam_policy.json")
+  // ファイルはこちらからDL: https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json
+  policy = file("${path.module}/iam_policy.json")
 }
 
 resource "aws_iam_role_policy_attachment" "aws_loadbalancer_controller" {
@@ -113,7 +112,6 @@ resource "helm_release" "aws-load-balancer-controller" {
 /**
  * ALB のセキュリティグループ
  */
-
 resource "aws_security_group" "ingress" {
   name        = "${var.app_name}-${var.stage}-AlbIngres"
   description = "Allow HTTP, HTTPS access."

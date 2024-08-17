@@ -2,6 +2,7 @@ variable app_name {}
 variable stage {}
 variable cluster_name {}
 variable ingress_cidr_blocks {
+  // ALBへのアクセスを許可するCIDR
   type = list(string)
   default = ["0.0.0.0/0"]
 }
@@ -17,7 +18,7 @@ locals {
   account_id = data.aws_caller_identity.self.account_id
   region = data.aws_region.self.name
   oidc_provider = replace(
-    // aws eks describe-cluster --name baseport-prd --output text --query "cluster.identity.oidc.issuer"
+    // AWS CLIで確認する場合: aws eks describe-cluster --name クラスタ名 --output text --query "cluster.identity.oidc.issuer"
     data.aws_eks_cluster.this.identity[0].oidc[0].issuer,
     "https://",
     ""

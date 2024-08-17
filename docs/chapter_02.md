@@ -177,9 +177,11 @@ resource "aws_eks_addon" "eks_pod_identity_agent" {
 
 ## モジュールの定義
 
+
+### 変数定義
+
 まずは、ノードグループモジュールが受け取る変数を定義します。  
 今回はノードグループ名、インスタンスタイプ、インスタンス数を指定できるようにします。
-
 
 
 `terraform/modules/node-group/variables.tf`
@@ -208,6 +210,8 @@ locals {
 }
 
 ```
+
+### リソース定義
 
 ノードグループで起動するインスタンスのインスタンスロールを定義します。
 
@@ -442,5 +446,20 @@ terraform -chdir=terraform/envs/dev/cluster output
 terraform -chdir=terraform/envs/dev/cluster output cluster_name
 
 # スクリプトで利用しやすい形で出力
-terraform -chdir=terraform/envs/dev/cluster output cluster_name -raw
+terraform -chdir=terraform/envs/dev/cluster output -raw cluster_name
+```
+
+k9sでリソースを確認してみましょう
+
+```bash
+CLUSTER_NAME=$(terraform -chdir=terraform/envs/dev/cluster output -raw cluster_name)
+
+# ~/.kube/configを生成
+aws eks update-kubeconfig --name $CLUSTER_NAME
+
+# CURRENTに今作成したクラスタが選択されているかを確認
+kubectl config get-contexts
+
+# k9sを起動してリソースを確認
+k9s
 ```
