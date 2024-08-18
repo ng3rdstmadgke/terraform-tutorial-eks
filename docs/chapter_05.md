@@ -5,7 +5,6 @@ Chapter5 リソースの削除
 # ■ EKS上のリソースを削除
 
 ```bash
-# 削除
 kubectl delete -f scripts/keycloak/tmp/app.yaml
 ```
 

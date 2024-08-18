@@ -526,6 +526,14 @@ cd tutorial
 mkdir -p scripts/keycloak
 mkdir -p terraform/envs/dev/{cluster,charts,keycloak}
 mkdir -p terraform/modules/{albc,hpa,node-group,secret-store-csi-driver}
+
+# ファイルの作成
+touch scripts/keycloak/setup.sh
+touch terraform/envs/dev/{cluster,charts,keycloak}/{main.tf,outputs.tf,variables.tf}
+touch terraform/envs/dev/cluster/secrets.auto.tfvars
+touch terraform/modules/{albc,hpa,node-group,secret-store-csi-driver}/main.tf
+touch terraform/modules/{albc,node-group}/variables.tf
+touch terraform/modules/albc/outputs.tf
 ```
 
 ## .gitignore配置
