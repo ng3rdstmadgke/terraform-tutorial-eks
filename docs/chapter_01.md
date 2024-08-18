@@ -578,6 +578,8 @@ terraform.rc
 
 最初のリソースとして [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用してVPCを作成してみましょう。 
 
+<img width="900px" src="drawio/architecture_chapter01.drawio.png">
+
 ## tfstate管理用s3バケット作成
 
 terraformのtfstateを管理するS3バケットを作成します。

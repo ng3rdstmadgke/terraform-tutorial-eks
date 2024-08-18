@@ -6,6 +6,8 @@ Chapter2 EKSクラスタ作成
 
 この章ではEKSクラスタを作成します。
 
+<img width="900px" src="drawio/architecture_chapter02.drawio.png">
+
 
 # ■ EKSクラスタの作成
 

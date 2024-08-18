@@ -12,6 +12,8 @@ Chapter3 Helmでチャートをインストール
 - secrets-store-csi-driver
 - secrets-store-csi-driver-provider-aws
 
+![](docs/drawio/architecture_chapter03.drawio.png)
+<img width="900px" src="drawio/architecture_chapter03.drawio.png">
 
 # ■ 変数の設定
 

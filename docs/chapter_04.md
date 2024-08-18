@@ -6,6 +6,8 @@ Chapter4 Keycloakの構築
 
 この章ではEKSクラスタ上にkeycloakをデプロイします。  
 
+<img width="900px" src="drawio/architecture_chapter04.drawio.png">
+
 # ■ 変数の設定
 
 `terraform/envs/dev/keycloak/variables.tf`
