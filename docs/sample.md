@@ -119,7 +119,7 @@ terraform -chdir=terraform/envs/dev/keycloak apply -auto-approve
 
 ```bash
 # マニフェスト生成
-bash scripts/keycloak/apply.sh
+bash scripts/keycloak/setup.sh
 
 # デプロイ
 kubectl apply -f scripts/keycloak/tmp/app.yaml
@@ -139,16 +139,18 @@ keycloakコンテナのshell内での操作
 $ /opt/keycloak/bin/kcadm.sh config credentials \
     --server http://localhost:8080 \
     --realm master \
-    --user ユーザー名 \
-    --password パスワード
+    --user $KEYCLOAK_ADMIN \
+    --password $KEYCLOAK_ADMIN_PASSWORD
 
 # sslRequiredを無効化
-$ /opt/keycloak/bin/update realms/master -s sslRequired=NONE
+$ /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
 ```
 
 ALBのエンドポイントにアクセスしてログインできることを確認します。
 
-
+```bash
+kubectl -n keycloak get ing
+```
 
 ## 削除
 

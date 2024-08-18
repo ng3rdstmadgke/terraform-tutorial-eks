@@ -40,7 +40,7 @@ data "aws_eks_cluster_auth" "this" {
 
 # ■ プロバイダの設定
 
-この章ではAWSプロバイダのほかに、[Kubernetesプロバイダ](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs)と[Helmプロバイダ](https://registry.terraform.io/providers/hashicorp/helm/latest/docs)を利用するので、それぞれのプロバイダをセットアップしていきます。
+この章では[AWSプロバイダ](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)のほか、[Kubernetesプロバイダ](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs)と[Helmプロバイダ](https://registry.terraform.io/providers/hashicorp/helm/latest/docs)を利用するので、それぞれのプロバイダをセットアップしていきます。
 
 
 `terraform/envs/dev/charts/main.tf`

@@ -622,7 +622,7 @@ aws dynamodb create-table \
   - `backend`  
   terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。
   - `required_providers`  
-  利用するプロバイダを指定します。今回は [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を設定します。
+  利用するプロバイダを指定します。今回は [AWSプロバイダ](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用します。
 - `provider`  
 awsプロバイダの設定を記述します。
 

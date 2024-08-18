@@ -7,7 +7,7 @@ PROJECT_DIR=$(cd $SCRIPT_DIR/../..; pwd)
 
 cd $SCRIPT_DIR
 
-
+# terraformのoutputから必要な情報を取得
 SECURITY_GROUP_NAME=$(terraform -chdir=$PROJECT_DIR/terraform/envs/dev/charts output -raw alb_ingress_sg)
 NAMESPACE=$(terraform -chdir=$PROJECT_DIR/terraform/envs/dev/keycloak output -raw namespace)
 SERVICE_ACCOUNT=$(terraform -chdir=$PROJECT_DIR/terraform/envs/dev/keycloak output -raw service_account)

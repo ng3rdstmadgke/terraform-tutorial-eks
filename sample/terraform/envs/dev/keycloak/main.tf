@@ -23,6 +23,7 @@ terraform {
   }
 }
 
+// AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
 provider "aws" {
   region = "ap-northeast-1"
   default_tags {
@@ -113,6 +114,7 @@ resource "aws_iam_role_policy_attachment" "keycloak" {
 /**
  * Keycloakのadminログイン情報を保持する SecretsManager
  */
+// https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password
 resource "random_password" "keycloak_user" {
   length           = 32
   lower            = true  # 小文字を文字列に含める
@@ -130,13 +132,14 @@ resource "random_password" "keycloak_password" {
   override_special = "@_=+-"  # 記号で利用する文字列を指定 (default: !@#$%&*()-_=+[]{}<>:?)
 }
 
+// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret
 resource "aws_secretsmanager_secret" "keycloak_admin_user" {
   name = "/${local.app_name}/${local.stage}/keycloak"
   recovery_window_in_days = 0
   force_overwrite_replica_secret = true
-
 }
 
+// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version
 resource "aws_secretsmanager_secret_version" "keycloak_admin_user" {
   secret_id = aws_secretsmanager_secret.keycloak_admin_user.id
   secret_string = jsonencode({
@@ -148,6 +151,7 @@ resource "aws_secretsmanager_secret_version" "keycloak_admin_user" {
 /**
  * RDS
  */
+// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group
 resource "aws_security_group" "app_db_sg" {
   name = "${local.app_name}-${local.stage}-keycloak-db"
   vpc_id = data.aws_eks_cluster.this.vpc_config[0].vpc_id
@@ -161,6 +165,7 @@ resource "aws_security_group" "app_db_sg" {
     from_port = 3306
     to_port = 3306
     protocol = "tcp"
+    // EKSクラスタのセキュリティグループからのアクセスを許可
     security_groups = [data.aws_eks_cluster.this.vpc_config[0].cluster_security_group_id]
   }
   tags = {
@@ -168,10 +173,8 @@ resource "aws_security_group" "app_db_sg" {
   }
 }
 
-// パラメータグループ
 // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_parameter_group
-// MySQLのパラメータ
-// aws rds describe-engine-default-parameters --db-parameter-group-family mysql8.0
+// MySQLのパラメータの確認: aws rds describe-engine-default-parameters --db-parameter-group-family mysql8.0
 resource "aws_db_parameter_group" "app_db_pg" {
   name = "${local.app_name}-${local.stage}-keycloak-db"
   family = "mysql8.0"
@@ -209,6 +212,7 @@ resource "aws_db_parameter_group" "app_db_pg" {
   }
 }
 
+// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_subnet_group
 resource "aws_db_subnet_group" "app_db_subnet_group" {
   name       = "${local.app_name}-${local.stage}-keycloak-db"
   subnet_ids = data.aws_eks_cluster.this.vpc_config[0].subnet_ids
@@ -223,6 +227,7 @@ resource "random_password" "db_password" {
   override_special = "@_=+-"  # 記号で利用する文字列を指定 (default: !@#$%&*()-_=+[]{}<>:?)
 }
 
+// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_instance
 resource "aws_db_instance" "app_db" {
   identifier = "${local.app_name}-${local.stage}-keycloak-db"
   storage_encrypted = true

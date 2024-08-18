@@ -8,3 +8,4 @@
 - [Chapter2 EKSクラスタ作成](docs/chapter_02.md)
 - [Chapter3 Helmでチャートをインストール](docs/chapter_03.md)
 - [Chapter4 Keycloakの構築](docs/chapter_04.md)
+- [Chapter5 リソースの削除](docs/chapter_05.md)
