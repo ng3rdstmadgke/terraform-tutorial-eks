@@ -249,10 +249,10 @@ resource "aws_db_instance" "app_db" {
   username = local.db_user
   password = random_password.db_password.result
   skip_final_snapshot  = true
-  deletion_protection = true
-
+  deletion_protection = false
   lifecycle {
-    prevent_destroy = true
+    // terraformから削除されたくない場合はコメントイン
+    #prevent_destroy = true
   }
 }
 
