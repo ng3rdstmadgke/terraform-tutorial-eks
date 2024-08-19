@@ -149,15 +149,14 @@ locals {
 ### リソース定義
 
 aws-load-balancer-controllerがALBを作成するために必要なIAMロールを作成します。  
-必要な権限は `https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json` にあるので、ダウンロードします。
+必要な権限は `https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json` からダウンロードします。  
 ※ 公式のIAMの作成手順はこちら: [ステップ 1: IAM を設定する - Kubernetes マニフェストを使用して AWS Load Balancer Controller アドオンをインストールする | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-manifest.html#lbc-iam)
 
 ```bash
 wget -P terraform/modules/albc "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json"
 ```
 
-aws-load-balancer-controllerのサービスアカウントに割り当てるIAMロールを作成します。  
-ポリシーには先ほどダウンロードした `iam_policy.json` を設定します。  
+aws-load-balancer-controller のサービスアカウントに割り当てるIAMロールを作成し、先ほどダウンロードした `iam_policy.json` をポリシーに設定します。  
 ※ IAM vRoles for Service Accounts(IRSA) の説明はこちらの記事が非常にわかりやすい: [EKSの認証・認可の仕組み解説 | Zenn](https://zenn.dev/take4s5i/articles/aws-eks-authentication#iam-roles-for-service-accounts(irsa))
 
 
