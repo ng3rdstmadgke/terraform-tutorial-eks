@@ -1,5 +1,5 @@
 locals {
-  app_name = "tutorial-mido"
+  app_name = "mido"
   stage    = "dev"
   cluster_name = "${local.app_name}-${local.stage}"
 }
