@@ -105,6 +105,10 @@ resource "aws_eks_access_entry" "admin" {
   cluster_name      = local.cluster_name
   principal_arn     = each.key
   type              = "STANDARD"
+
+  depends_on = [
+    module.eks
+  ]
 }
 
 // aws_eks_access_policy_association | Terraform
@@ -119,6 +123,10 @@ resource "aws_eks_access_policy_association" "admin" {
   access_scope {
     type       = "cluster"
   }
+
+  depends_on = [
+    module.eks
+  ]
 }
 
 /**
