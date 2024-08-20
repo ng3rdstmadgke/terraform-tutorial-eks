@@ -181,7 +181,7 @@ module node_group_1 {
   stage = local.stage
   node_group_name = "ng-1"
   // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
-  instance_types = ["t3a.xlarge"]
+  instance_types = ["t3a.xlarge", "t3a.large", "t3a.medium", "t3.xlarge", "t3.large", "t3.medium"]
   desired_size = 1
 
   depends_on = [
