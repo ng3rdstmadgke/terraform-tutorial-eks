@@ -13,7 +13,7 @@ terraform {
     // AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.61.0"
+      version = "~> 5.82.2"
     }
   }
 }
@@ -36,7 +36,7 @@ provider "aws" {
  */
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.8.1"
+  version = "~> 5.17.0"
 
   name = "${local.app_name}-${local.stage}-vpc"
   cidr = local.vpc_cidr
