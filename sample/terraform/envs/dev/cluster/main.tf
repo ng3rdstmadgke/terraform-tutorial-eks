@@ -28,37 +28,6 @@ provider "aws" {
   }
 }
 
-/**
- * VPC作成
- *
- * terraform-aws-modules/vpc/aws | Terraform
- * https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest
- */
-module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.8.1"
-
-  name = "${local.app_name}-${local.stage}-vpc"
-  cidr = local.vpc_cidr
-
-  azs             = ["ap-northeast-1a", "ap-northeast-1c", "ap-northeast-1d"]
-  private_subnets = local.private_subnets
-  public_subnets  = local.public_subnets
-
-  enable_nat_gateway = true
-  single_nat_gateway = true
-  enable_vpn_gateway = false
-
-  // パブリックサブネットを外部LB用に利用することをKubernetesとALBが認識できるようにするためのタグ
-  public_subnet_tags = {
-    "kubernetes.io/role/elb" = "1"
-  }
-  // プライベートネットを内部LB用に利用することをKubernetesとALBが認識できるようにするためのタグ
-  private_subnet_tags = {
-    "kubernetes.io/role/internal-elb" = "1"
-  }
-}
-
 
 /**
  * EKSクラスタ作成
@@ -123,66 +92,6 @@ resource "aws_eks_access_policy_association" "admin" {
   access_scope {
     type       = "cluster"
   }
-
-  depends_on = [
-    module.eks
-  ]
-}
-
-/**
- * アドオン
- *
- * aws_eks_addon | Terraform
- * https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon
- */
-resource "aws_eks_addon" "coredns" {
-  cluster_name  = local.cluster_name
-  addon_name    = "coredns"
-  addon_version = "v1.11.1-eksbuild.8"
-
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-resource "aws_eks_addon" "kube_proxy" {
-  cluster_name = local.cluster_name
-  addon_name   = "kube-proxy"
-  addon_version = "v1.30.0-eksbuild.3"
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-resource "aws_eks_addon" "vpc_cni" {
-  cluster_name = local.cluster_name
-  addon_name   = "vpc-cni"
-  addon_version = "v1.18.3-eksbuild.1"
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-resource "aws_eks_addon" "eks_pod_identity_agent" {
-  cluster_name = local.cluster_name
-  addon_name   = "eks-pod-identity-agent"
-  addon_version = "v1.3.0-eksbuild.1"
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-/**
- * ノードグループ
- */
-module node_group_1 {
-  source = "../../../modules/node-group"
-  app_name = local.app_name
-  stage = local.stage
-  node_group_name = "ng-1"
-  // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
-  instance_types = ["t3a.xlarge", "t3a.large", "t3a.medium", "t3.xlarge", "t3.large", "t3.medium"]
-  desired_size = 1
 
   depends_on = [
     module.eks

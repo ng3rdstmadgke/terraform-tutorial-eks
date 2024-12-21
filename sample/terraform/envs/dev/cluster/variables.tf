@@ -1,5 +1,5 @@
 locals {
-  app_name = "mido"
+  app_name = "tte-mido"
   stage    = "dev"
   cluster_name = "${local.app_name}-${local.stage}"
   vpc_cidr = "10.60.0.0/16"
