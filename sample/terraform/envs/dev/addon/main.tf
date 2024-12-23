@@ -13,7 +13,7 @@ terraform {
     // AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.61.0"
+      version = "~> 5.82.2"
     }
   }
 }
@@ -28,51 +28,57 @@ provider "aws" {
   }
 }
 
-locals {
-  app_name = "tte-mido"
-  stage    = "dev"
-  cluster_name = "${local.app_name}-${local.stage}"
+/**
+ * Pod Identity Agent
+ *
+ * - Amazon EKS Pod Identity エージェントのセットアップ
+ *   https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/pod-id-agent-setup.html
+ */
+resource "aws_eks_addon" "eks_pod_identity_agent" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon
+
+  cluster_name = local.cluster_name
+  addon_name   = "eks-pod-identity-agent"
+  // バージョンの確認: aws eks describe-addon-versions --addon-name eks-pod-identity-agent
+  addon_version = "v1.3.4-eksbuild.1"
 }
 
 /**
- * アドオン
+ * EBS CSI Driver
  *
- * aws_eks_addon | Terraform
- * https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon
+ * - Amazon EBS で Kubernetes ボリュームを保存する
+ *   https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/ebs-csi.html
  */
-resource "aws_eks_addon" "coredns" {
+module ebs_csi_driver {
+  source = "../../../modules/ebs-csi-driver"
+  app_name = local.app_name
+  stage = local.stage
+  cluster_name = local.cluster_name
+}
+
+resource "aws_eks_addon" "aws_ebs_csi_driver" {
   cluster_name  = local.cluster_name
-  addon_name    = "coredns"
-  addon_version = "v1.11.1-eksbuild.8"
+  addon_name    = "aws-ebs-csi-driver"
+  // バージョンの確認: aws eks describe-addon-versions --addon-name aws-ebs-csi-driver
+  addon_version = "v1.37.0-eksbuild.1"
+  // Pod Identity に kube-system.ebs-csi-controller-sa に紐づけるIAMロールを指定
+  pod_identity_association {
+    role_arn = module.ebs_csi_driver.role_arn
+    service_account = "ebs-csi-controller-sa"
+  }
 
-  depends_on = [
-    module.node_group_1
-  ]
+  depends_on = [ aws_eks_addon.eks_pod_identity_agent ]
 }
 
-resource "aws_eks_addon" "kube_proxy" {
-  cluster_name = local.cluster_name
-  addon_name   = "kube-proxy"
-  addon_version = "v1.30.0-eksbuild.3"
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-resource "aws_eks_addon" "vpc_cni" {
-  cluster_name = local.cluster_name
-  addon_name   = "vpc-cni"
-  addon_version = "v1.18.3-eksbuild.1"
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-resource "aws_eks_addon" "eks_pod_identity_agent" {
-  cluster_name = local.cluster_name
-  addon_name   = "eks-pod-identity-agent"
-  addon_version = "v1.3.0-eksbuild.1"
-  depends_on = [
-    module.node_group_1
-  ]
+/**
+ * EBS CSI Snapshot Controller
+ *
+ * - Amazon EKS クラスターでアドオンを活用し、Amazon EBS スナップショットを永続ストレージに使用する
+ *   https://aws.amazon.com/jp/blogs/news/using-amazon-ebs-snapshots-for-persistent-storage-with-your-amazon-eks-cluster-by-leveraging-add-ons/
+ */
+resource "aws_eks_addon" "snapshot_controller" {
+  cluster_name  = local.cluster_name
+  addon_name    = "snapshot-controller"
+  // バージョンの確認: aws eks describe-addon-versions --addon-name snapshot-controller
+  addon_version = "v8.1.0-eksbuild.2"
 }
