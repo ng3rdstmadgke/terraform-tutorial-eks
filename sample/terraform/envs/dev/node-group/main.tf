@@ -28,12 +28,6 @@ provider "aws" {
   }
 }
 
-locals {
-  app_name = "tte-mido"
-  stage    = "dev"
-  cluster_name = "${local.app_name}-${local.stage}"
-}
-
 
 /**
  * ノードグループ
