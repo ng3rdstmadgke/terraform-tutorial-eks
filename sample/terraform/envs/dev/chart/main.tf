@@ -30,11 +30,6 @@ provider "aws" {
 
 module albc {
   source = "../../../modules/albc"
-  app_name = local.app_name
-  stage = local.stage
   cluster_name = local.cluster_name
-}
-
-module secret_store_csi_driver {
-  source = "../../../modules/secret-store-csi-driver"
+  vpc_id = local.vpc_id
 }
