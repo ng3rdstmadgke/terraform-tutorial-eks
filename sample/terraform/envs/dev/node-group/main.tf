@@ -13,7 +13,7 @@ terraform {
     // AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.61.0"
+      version = "~> 5.82.2"
     }
   }
 }
@@ -38,16 +38,12 @@ locals {
 /**
  * ノードグループ
  */
-module node_group_1 {
-  source = "../../../modules/node-group"
+module node_group_bottlerocket_1 {
+  source = "../../../modules/node-group-bottlerocket"
   app_name = local.app_name
   stage = local.stage
-  node_group_name = "ng-1"
-  // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
-  instance_types = ["t3a.xlarge", "t3a.large", "t3a.medium", "t3.xlarge", "t3.large", "t3.medium"]
+  node_group_name = "ng-bottlerocket-1"
+  ami_type = "BOTTLEROCKET_x86_64"
+  instance_types = ["t3a.xlarge", "t3a.large", "t3a.medium"] // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
   desired_size = 1
-
-  depends_on = [
-    module.eks
-  ]
 }

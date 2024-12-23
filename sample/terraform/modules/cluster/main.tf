@@ -49,8 +49,9 @@ resource "aws_eks_cluster" "this" {
     }
   }
 
-  // aws-cniやkube-proxy, CoreDNSといったアドオンをデフォルトでインストールするか
-  bootstrap_self_managed_addons = false
+  // vpc-cni, kube-proxy, corednsといったアドオンを管理対象外のアドオンとしてクラスタ作成時にインストールするか
+  // NOTE: この値を変更すると新しいクラスタが強制的に作成されるので注意
+  bootstrap_self_managed_addons = true
 
   // CloudWatchLogsに出力するコントロールプレーンのログ設定: https://docs.aws.amazon.com/eks/latest/userguide/control-plane-logs.html
   enabled_cluster_log_types = [ "api", "audit", "authenticator", "controllerManager", "scheduler" ]
@@ -93,6 +94,10 @@ resource "aws_eks_cluster" "this" {
 
   // Hybrid Nodes利用時の設定
   // remote_network_config {}
+
+  depends_on = [
+    aws_cloudwatch_log_group.eks_control_plane
+  ]
 }
 
 /**
