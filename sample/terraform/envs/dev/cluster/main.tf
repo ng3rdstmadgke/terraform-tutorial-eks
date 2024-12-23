@@ -33,8 +33,7 @@ provider "aws" {
  */
 module cluster {
   source = "../../../modules/cluster"
-  app_name = local.app_name
-  stage = local.stage
+  cluster_name = local.cluster_name
   subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
   access_entries = var.access_entries
 }

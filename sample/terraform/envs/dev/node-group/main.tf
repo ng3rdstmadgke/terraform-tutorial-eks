@@ -34,8 +34,7 @@ provider "aws" {
  */
 module node_group_bottlerocket_1 {
   source = "../../../modules/node-group-bottlerocket"
-  app_name = local.app_name
-  stage = local.stage
+  cluster_name = local.cluster_name
   node_group_name = "ng-bottlerocket-1"
   ami_type = "BOTTLEROCKET_x86_64"
   instance_types = ["t3a.xlarge", "t3a.large", "t3a.medium"] // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/

@@ -1,6 +1,5 @@
 locals {
-  app_name = data.terraform_remote_state.base.outputs.app_name
-  stage    = data.terraform_remote_state.base.outputs.stage
+  cluster_name = data.terraform_remote_state.base.outputs.cluster_name
   vpc_cidr = "10.60.0.0/16"
   private_subnets = [
     "10.60.1.0/24",

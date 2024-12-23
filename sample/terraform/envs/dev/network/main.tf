@@ -38,7 +38,7 @@ module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
   version = "~> 5.17.0"
 
-  name = "${local.app_name}-${local.stage}-vpc"
+  name = "${local.cluster_name}-vpc"
   cidr = local.vpc_cidr
 
   azs             = ["ap-northeast-1a", "ap-northeast-1c", "ap-northeast-1d"]

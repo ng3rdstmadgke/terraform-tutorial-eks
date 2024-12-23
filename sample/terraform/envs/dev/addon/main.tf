@@ -51,8 +51,6 @@ resource "aws_eks_addon" "eks_pod_identity_agent" {
  */
 module ebs_csi_driver {
   source = "../../../modules/ebs-csi-driver"
-  app_name = local.app_name
-  stage = local.stage
   cluster_name = local.cluster_name
 }
 

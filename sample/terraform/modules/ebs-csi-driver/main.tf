@@ -1,5 +1,5 @@
 resource "aws_iam_role" "ebs_csi_controller_sa_role" {
-  name = "${var.app_name}-${var.stage}-EbsCsiControllerSaRole"
+  name = "${var.cluster_name}-EbsCsiControllerSaRole"
   assume_role_policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
@@ -27,7 +27,7 @@ resource "aws_iam_role_policy_attachment" "managed_policies" {
 }
 
 resource "aws_iam_policy" "ebs_csi_driver_encrypt_volume_policy" {
-  name = "${var.app_name}-${var.stage}-EbsCsiDriverEncryptVolumePolicy"
+  name = "${var.cluster_name}-EbsCsiDriverEncryptVolumePolicy"
   policy = jsonencode(
     {
       "Version": "2012-10-17",

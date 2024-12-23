@@ -1,5 +1,4 @@
-variable app_name {}
-variable stage {}
+variable cluster_name {}
 variable node_group_name {}
 variable ami_type {
   type = string
@@ -24,9 +23,5 @@ variable desired_size {
 
 data "aws_eks_cluster" "this" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster
-  name = local.cluster_name
-}
-
-locals {
-  cluster_name = "${var.app_name}-${var.stage}"
+  name = var.cluster_name
 }

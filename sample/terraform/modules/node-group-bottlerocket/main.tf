@@ -1,6 +1,6 @@
 // Amazon EKS ノードの IAM ロール: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-node-role.html#create-worker-node-role
 resource "aws_iam_role" "eks_node_role" {
-  name = "${var.app_name}-${var.stage}-${var.node_group_name}-EKSNodeRole"
+  name = "${var.cluster_name}-${var.node_group_name}-EKSNodeRole"
   assume_role_policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
@@ -27,7 +27,7 @@ resource "aws_iam_role_policy_attachment" "eks_node_policy" {
 }
 
 resource "aws_iam_policy" "amazoneks_cni_ipv6_policy" {
-  name = "${var.app_name}-${var.stage}-${var.node_group_name}-AmazonEKS_CNI_IPv6_Policy"
+  name = "${var.cluster_name}-${var.node_group_name}-AmazonEKS_CNI_IPv6_Policy"
   policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
@@ -64,7 +64,7 @@ resource "aws_iam_role_policy_attachment" "amazoneks_cni_ipv6_policy" {
 resource "aws_launch_template" "node_instance" {
   // 起動テンプレート: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template
 
-  name = "${var.app_name}-${var.stage}-${var.node_group_name}-EKSNodeLaunchTemplate"
+  name = "${var.cluster_name}-${var.node_group_name}-EKSNodeLaunchTemplate"
 
   vpc_security_group_ids = [
     data.aws_eks_cluster.this.vpc_config[0].cluster_security_group_id,
@@ -97,7 +97,7 @@ resource "aws_launch_template" "node_instance" {
     resource_type = "instance"
 
     tags = {
-      Name = "${var.app_name}-${var.stage}-${var.node_group_name}"
+      Name = "${var.cluster_name}-${var.node_group_name}"
     }
   }
 
@@ -106,7 +106,7 @@ resource "aws_launch_template" "node_instance" {
   user_data = base64encode(templatefile(
     "${path.module}/user-data.ini",
     {
-      cluster_name = local.cluster_name,
+      cluster_name = var.cluster_name,
       api_server = data.aws_eks_cluster.this.endpoint,
       cluster_certificate = data.aws_eks_cluster.this.certificate_authority[0].data,
     }
@@ -119,7 +119,7 @@ resource "aws_eks_node_group" "this" {
 
   node_group_name = var.node_group_name
   // EKSクラスタ名
-  cluster_name    = local.cluster_name
+  cluster_name    = var.cluster_name
   // Kubernetesバージョン
   version         = data.aws_eks_cluster.this.version
   // ノードに付与するロール

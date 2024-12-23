@@ -10,7 +10,7 @@
 resource "aws_eks_cluster" "this" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_cluster
 
-  name = local.cluster_name
+  name = var.cluster_name
 
   role_arn = aws_iam_role.cluster_role.arn
 
@@ -104,7 +104,7 @@ resource "aws_eks_cluster" "this" {
  * クラスターロール
  */
 resource "aws_iam_role" "cluster_role" {
-  name = "${var.app_name}-${var.stage}-EKSClusterRole"
+  name = "${var.cluster_name}-EKSClusterRole"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17"
     Statement = [
@@ -135,7 +135,7 @@ resource "aws_iam_role_policy_attachment" "aws_managed_policy" {
 
 // etcdに保存されたKubernetesシークレットの暗号化に利用するKMSの操作権限
 resource "aws_iam_policy" "secret_encription_policy" {
-  name = "${var.app_name}-${var.stage}-SecretEncriptionPolicy"
+  name = "${var.cluster_name}-SecretEncriptionPolicy"
   policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
@@ -164,7 +164,7 @@ resource "aws_iam_role_policy_attachment" "secret_encription_policy" {
 resource "aws_kms_key" "kubernetes_encription" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key
 
-  description = "${var.app_name}-${var.stage} cluster encryption key"
+  description = "${var.cluster_name} cluster encryption key"
   is_enabled = true
   key_usage = "ENCRYPT_DECRYPT"
   multi_region = false
@@ -236,7 +236,7 @@ resource "aws_kms_key" "kubernetes_encription" {
 resource "aws_kms_alias" "kubernetes_encription" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias
 
-  name = "alias/eks/${local.cluster_name}"
+  name = "alias/eks/${var.cluster_name}"
   target_key_id = aws_kms_key.kubernetes_encription.key_id
 }
 
@@ -266,12 +266,12 @@ resource "aws_iam_openid_connect_provider" "default" {
 resource "aws_cloudwatch_log_group" "eks_control_plane" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group
 
-  name = "/aws/eks/${local.cluster_name}/cluster"
+  name = "/aws/eks/${var.cluster_name}/cluster"
 
   // ログの保持期間
   retention_in_days = 30
 
   tags = {
-    Name = "/aws/eks/${local.cluster_name}/cluster"
+    Name = "/aws/eks/${var.cluster_name}/cluster"
   }
 }

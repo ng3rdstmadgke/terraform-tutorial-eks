@@ -19,17 +19,7 @@ terraform {
 }
 
 locals {
-  app_name = "tte-mido"
-  stage    = "dev"
-  cluster_name = "${local.app_name}-${local.stage}"
-}
-
-output "app_name" {
-  value = local.app_name
-}
-
-output "stage" {
-  value = local.stage
+  cluster_name = "tte-mido-dev"
 }
 
 output "cluster_name" {
