@@ -3,7 +3,7 @@ terraform {
 
   backend "s3" {
     bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/chart/terraform.tfstate"
+    key    = "mido/dev/plagin/terraform.tfstate"
     region = "ap-northeast-1"
     encrypt = true
     dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
