@@ -1,7 +1,5 @@
 locals {
-  app_name = "tte-mido"
-  stage    = "dev"
-  cluster_name = "${local.app_name}-${local.stage}"
+  cluster_name = data.terraform_remote_state.base.outputs.cluster_name
   account_id = data.aws_caller_identity.this.account_id
   aws_region = data.aws_region.this.name
   namespace = "keycloak"
@@ -15,6 +13,19 @@ locals {
     ""
   )
 }
+
+data terraform_remote_state "base" {
+  backend = "s3"
+
+  config = {
+    bucket = "terraform-tutorial-eks-tfstate"
+    key    = "mido/dev/base/terraform.tfstate"
+    region = "ap-northeast-1"
+    encrypt = true
+    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+  }
+}
+
 
 data "aws_caller_identity" "this" {}
 

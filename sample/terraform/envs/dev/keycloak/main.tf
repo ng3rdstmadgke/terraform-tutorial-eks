@@ -68,7 +68,7 @@ resource "kubernetes_service_account" "keycloak" {
 }
 
 resource "aws_iam_role" "keycloak" {
-  name = "${local.app_name}-${local.stage}-KeycloakRole"
+  name = "${local.cluster_name}-KeycloakRole"
   assume_role_policy = jsonencode({
     "Version": "2012-10-17"
     "Statement": {
@@ -88,7 +88,7 @@ resource "aws_iam_role" "keycloak" {
 }
 
 resource "aws_iam_policy" "keycloak" {
-  name = "${local.app_name}-${local.stage}-KeycloakPolicy"
+  name = "${local.cluster_name}-KeycloakPolicy"
   policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
@@ -99,7 +99,7 @@ resource "aws_iam_policy" "keycloak" {
           "secretsmanager:DescribeSecret"
         ],
         "Resource": [
-          "arn:aws:secretsmanager:${local.aws_region}:${local.account_id}:secret:/${local.app_name}/${local.stage}/*"
+          "arn:aws:secretsmanager:${local.aws_region}:${local.account_id}:secret:/${local.cluster_name}/*"
         ]
       }
     ]
@@ -134,7 +134,7 @@ resource "random_password" "keycloak_password" {
 
 // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret
 resource "aws_secretsmanager_secret" "keycloak_admin_user" {
-  name = "/${local.app_name}/${local.stage}/keycloak"
+  name = "/${local.cluster_name}/keycloak"
   recovery_window_in_days = 0
   force_overwrite_replica_secret = true
 }
@@ -153,7 +153,7 @@ resource "aws_secretsmanager_secret_version" "keycloak_admin_user" {
  */
 // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group
 resource "aws_security_group" "app_db_sg" {
-  name = "${local.app_name}-${local.stage}-keycloak-db"
+  name = "${local.cluster_name}-keycloak-db"
   vpc_id = data.aws_eks_cluster.this.vpc_config[0].vpc_id
   egress {
     from_port   = 0
@@ -169,14 +169,14 @@ resource "aws_security_group" "app_db_sg" {
     security_groups = [data.aws_eks_cluster.this.vpc_config[0].cluster_security_group_id]
   }
   tags = {
-    "Name" = "${local.app_name}-${local.stage}-keycloak-db"
+    "Name" = "${local.cluster_name}-keycloak-db"
   }
 }
 
 // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_parameter_group
 // MySQLのパラメータの確認: aws rds describe-engine-default-parameters --db-parameter-group-family mysql8.0
 resource "aws_db_parameter_group" "app_db_pg" {
-  name = "${local.app_name}-${local.stage}-keycloak-db"
+  name = "${local.cluster_name}-keycloak-db"
   family = "mysql8.0"
   parameter {
     name = "character_set_client"
@@ -214,7 +214,7 @@ resource "aws_db_parameter_group" "app_db_pg" {
 
 // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_subnet_group
 resource "aws_db_subnet_group" "app_db_subnet_group" {
-  name       = "${local.app_name}-${local.stage}-keycloak-db"
+  name       = "${local.cluster_name}-keycloak-db"
   subnet_ids = data.aws_eks_cluster.this.vpc_config[0].subnet_ids
 }
 
@@ -229,7 +229,7 @@ resource "random_password" "db_password" {
 
 // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_instance
 resource "aws_db_instance" "app_db" {
-  identifier = "${local.app_name}-${local.stage}-keycloak-db"
+  identifier = "${local.cluster_name}-keycloak-db"
   storage_encrypted = true
   engine               = "mysql"
   allocated_storage    = 20
@@ -261,7 +261,7 @@ resource "aws_db_instance" "app_db" {
  * RDS のログイン情報を保持する SecretsManager
  */
 resource "aws_secretsmanager_secret" "app_db_secret" {
-  name = "/${local.app_name}/${local.stage}/db"
+  name = "/${local.cluster_name}/db"
   recovery_window_in_days = 0
   force_overwrite_replica_secret = true
 }
