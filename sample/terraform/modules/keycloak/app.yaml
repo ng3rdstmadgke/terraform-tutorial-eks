@@ -1,22 +1,16 @@
-#!/bin/bash
-
-set -eu
-
-SCRIPT_DIR=$(cd $(dirname $0); pwd)
-PROJECT_DIR=$(cd $SCRIPT_DIR/../..; pwd)
-
-cd $SCRIPT_DIR
-
-# terraformのoutputから必要な情報を取得
-SECURITY_GROUP_NAME=$(terraform -chdir=$PROJECT_DIR/terraform/envs/dev/plugin output -raw alb_ingress_sg)
-NAMESPACE=$(terraform -chdir=$PROJECT_DIR/terraform/envs/dev/keycloak output -raw namespace)
-SERVICE_ACCOUNT=$(terraform -chdir=$PROJECT_DIR/terraform/envs/dev/keycloak output -raw service_account)
-USER_SECRET_NAME=$(terraform -chdir=$PROJECT_DIR/terraform/envs/dev/keycloak output -raw keycloak_user_secret)
-DB_SECRET_NAME=$(terraform -chdir=$PROJECT_DIR/terraform/envs/dev/keycloak output -raw keycloak_db_secret)
-
-mkdir -p ${SCRIPT_DIR}/tmp
-
-cat <<EOF > ${SCRIPT_DIR}/tmp/app.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${namespace}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${service_account}
+  namespace: ${namespace}
+  annotations:
+    eks.amazonaws.com/role-arn: ${role_arn}
 ---
 #
 # Keycloakのデータベース接続情報をSecrets Managerから取得する
@@ -25,7 +19,7 @@ apiVersion: secrets-store.csi.x-k8s.io/v1
 kind: SecretProviderClass
 metadata:
   name: keycloak-db-spc
-  namespace: ${NAMESPACE}
+  namespace: ${namespace}
 spec:
   provider: aws
   secretObjects:
@@ -45,7 +39,7 @@ spec:
   parameters:
     # jmesPathを利用する場合JSONの値はString型である必要がある
     objects: |
-        - objectName: "${DB_SECRET_NAME}"
+        - objectName: "${db_secret_name}"
           objectType: "secretsmanager"
           jmesPath:
             - path: db_host
@@ -66,7 +60,7 @@ apiVersion: secrets-store.csi.x-k8s.io/v1
 kind: SecretProviderClass
 metadata:
   name: keycloak-user-spc
-  namespace: ${NAMESPACE}
+  namespace: ${namespace}
 spec:
   provider: aws
   secretObjects:
@@ -79,7 +73,7 @@ spec:
           objectName: alias_password
   parameters:
     objects: |
-        - objectName: "${USER_SECRET_NAME}"
+        - objectName: "${user_secret_name}"
           objectType: "secretsmanager"
           jmesPath:
             - path: user
@@ -91,7 +85,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: keycloak
-  namespace: ${NAMESPACE}
+  namespace: ${namespace}
   labels:
     app: keycloak
 spec:
@@ -104,7 +98,7 @@ spec:
       labels:
         app: keycloak
     spec:
-      serviceAccountName: ${SERVICE_ACCOUNT}
+      serviceAccountName: ${service_account}
 
       volumes:
         - name: keycloak-user-secret-volume
@@ -120,6 +114,9 @@ spec:
             volumeAttributes:
               secretProviderClass: keycloak-db-spc
       containers:
+        #- name: debug
+        #  image: amazon/aws-cli
+        #  command: ["sleep", "3600"]
         - name: keycloak
           image: quay.io/keycloak/keycloak:25.0.1
           args: ["start"]
@@ -187,7 +184,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: keycloak-svc
-  namespace: ${NAMESPACE}
+  namespace: ${namespace}
   labels:
     app: keycloak
 spec:
@@ -202,7 +199,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: keycloak-alb
-  namespace: ${NAMESPACE}
+  namespace: ${namespace}
   # Ingress annotations - AWS Load Balancer Controller
   # https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.4/guide/ingress/annotations/
   annotations:
@@ -210,7 +207,7 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/tags: "PROJECT=TERRAFORM_TUTORIAL_EKS"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
-    alb.ingress.kubernetes.io/security-groups: ${SECURITY_GROUP_NAME}
+    alb.ingress.kubernetes.io/security-groups: ${alb_ingress_sg}
     alb.ingress.kubernetes.io/manage-backend-security-group-rules: "true"
     alb.ingress.kubernetes.io/healthcheck-path: /realms/master
 spec:
@@ -225,4 +222,3 @@ spec:
                 name: keycloak-svc
                 port:
                   number: 8080
-EOF
