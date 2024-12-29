@@ -34,7 +34,7 @@ RUN echo 'ja_JP.UTF-8 UTF-8' >> /etc/locale.gen && \
 RUN ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
 
 # terraform インストール
-# https://developer.hashicorp.com/terraform/install
+# https://developer.hashicorp.com/terraform/install#linux
 ENV TERRAFORM_VERSION=1.10.3
 RUN wget https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip && \
 unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip && \
