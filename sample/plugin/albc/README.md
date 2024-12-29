@@ -31,5 +31,5 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --version "1.11.0" \
   --namespace "kube-system" \
   --create-namespace \
-  --values ./values.yaml
+  --values ./tmp/values.yaml
 ```
