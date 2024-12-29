@@ -1,9 +1,9 @@
 terraform {
-  required_version = "~> 1.9.4"
+  required_version = "~> 1.10"
 
   backend "s3" {
     bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/keycloak/terraform.tfstate"
+    key    = "mido/dev/service/terraform.tfstate"
     region = "ap-northeast-1"
     encrypt = true
     dynamodb_table = "terraform-tutorial-eks-tfstate-lock"

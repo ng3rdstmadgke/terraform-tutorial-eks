@@ -21,11 +21,13 @@ RUN apt-get update && \
       vim \
       tmux \
       jq \
+      yq \
       fzf \
       groff \
       procps \
       default-mysql-client \
-      python3.12
+      python3 \
+      python3-pip
 
 # ロケール設定
 RUN echo 'ja_JP.UTF-8 UTF-8' >> /etc/locale.gen && \
