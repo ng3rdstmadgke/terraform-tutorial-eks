@@ -8,13 +8,13 @@ resource "aws_iam_role" "keycloak" {
     "Statement": {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::${local.account_id}:oidc-provider/${local.oidc_provider}"
+        "Federated": "arn:aws:iam::${local.account_id}:oidc-provider/${var.cluster_oidc_provider}"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringLike": {
-          "${local.oidc_provider}:sub": "system:serviceaccount:${local.namespace}:${local.service_account}",
-          "${local.oidc_provider}:aud": "sts.amazonaws.com"
+          "${var.cluster_oidc_provider}:sub": "system:serviceaccount:${local.namespace}:${local.service_account}",
+          "${var.cluster_oidc_provider}:aud": "sts.amazonaws.com"
         }
       }
     }
@@ -92,19 +92,19 @@ resource "aws_security_group" "app_db_sg" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group
 
   name = "${var.cluster_name}-keycloak-db"
-  vpc_id = data.aws_eks_cluster.this.vpc_config[0].vpc_id
+  vpc_id = var.vpc_id
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    security_groups = [data.aws_eks_cluster.this.vpc_config[0].cluster_security_group_id]
+    security_groups = [var.cluster_security_group_id]
   }
   ingress {
     from_port = 3306
     to_port = 3306
     protocol = "tcp"
     // EKSクラスタのセキュリティグループからのアクセスを許可
-    security_groups = [data.aws_eks_cluster.this.vpc_config[0].cluster_security_group_id]
+    security_groups = [var.cluster_security_group_id]
   }
   tags = {
     "Name" = "${var.cluster_name}-keycloak-db"
@@ -155,7 +155,7 @@ resource "aws_db_subnet_group" "app_db_subnet_group" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_subnet_group
 
   name       = "${var.cluster_name}-keycloak-db"
-  subnet_ids = data.aws_eks_cluster.this.vpc_config[0].subnet_ids
+  subnet_ids = var.private_subnet_ids
 }
 
 resource "random_password" "db_password" {
@@ -222,7 +222,7 @@ resource "aws_secretsmanager_secret_version" "app_db_secret_version" {
  * マニフェストファイルの生成
  */
 resource "local_file" "keycloak_manifest" {
-  filename = "${local.project_root}/service/keycloak/tmp/app.yaml"
+  filename = "${var.project_dir}/service/keycloak/tmp/app.yaml"
   content = templatefile(
     "${path.module}/app.yaml",
     {

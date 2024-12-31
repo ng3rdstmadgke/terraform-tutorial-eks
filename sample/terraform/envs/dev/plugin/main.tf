@@ -3,7 +3,7 @@ terraform {
 
   backend "s3" {
     bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/plagin/terraform.tfstate"
+    key    = "mido/dev/plugin/terraform.tfstate"
     region = "ap-northeast-1"
     encrypt = true
     dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
@@ -32,4 +32,5 @@ module albc {
   source = "../../../modules/albc"
   cluster_name = local.cluster_name
   vpc_id = local.vpc_id
+  project_dir = local.project_dir
 }

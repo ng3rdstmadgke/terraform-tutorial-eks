@@ -1,4 +1,9 @@
 variable cluster_name {}
+variable cluster_version {}
+variable cluster_security_group_id {}
+variable cluster_api_endpoint {}
+variable cluster_certificate {}
+variable cluster_subnet_ids {}
 variable node_group_name {}
 variable ami_type {
   type = string

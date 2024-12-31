@@ -30,6 +30,11 @@ provider "aws" {
 
 module keycloak {
   source = "../../../modules/keycloak"
-  cluster_name = data.terraform_remote_state.base.outputs.cluster_name
-  alb_ingress_sg = data.terraform_remote_state.plugin.outputs.alb_ingress_sg
+  cluster_name = local.cluster_name
+  cluster_oidc_provider = local.oidc_provider
+  cluster_security_group_id = local.cluster_security_group_id
+  alb_ingress_sg = local.alb_ingress_sg
+  vpc_id = local.vpc_id
+  private_subnet_ids = local.private_subnet_ids
+  project_dir = local.project_dir
 }

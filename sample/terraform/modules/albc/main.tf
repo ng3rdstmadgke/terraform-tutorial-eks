@@ -90,7 +90,7 @@ resource "aws_security_group" "alb_ingress" {
 }
 
 resource "local_file" "albc_values" {
-  filename = "${local.project_root}/plugin/albc/tmp/values.yaml"
+  filename = "${var.project_dir}/plugin/albc/tmp/values.yaml"
   content = templatefile(
     "${path.module}/values.yaml",
     {

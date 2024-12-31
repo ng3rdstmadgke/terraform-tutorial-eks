@@ -67,7 +67,7 @@ resource "aws_launch_template" "node_instance" {
   name = "${var.cluster_name}-${var.node_group_name}-EKSNodeLaunchTemplate"
 
   vpc_security_group_ids = [
-    data.aws_eks_cluster.this.vpc_config[0].cluster_security_group_id,
+    var.cluster_security_group_id,
   ]
 
   block_device_mappings {
@@ -106,9 +106,9 @@ resource "aws_launch_template" "node_instance" {
   user_data = base64encode(templatefile(
     "${path.module}/user-data.ini",
     {
-      cluster_name = var.cluster_name,
-      api_server = data.aws_eks_cluster.this.endpoint,
-      cluster_certificate = data.aws_eks_cluster.this.certificate_authority[0].data,
+      cluster_name = var.cluster_name
+      api_server = var.cluster_api_endpoint
+      cluster_certificate =  var.cluster_certificate
     }
   ))
 }
@@ -121,11 +121,11 @@ resource "aws_eks_node_group" "this" {
   // EKSクラスタ名
   cluster_name    = var.cluster_name
   // Kubernetesバージョン
-  version         = data.aws_eks_cluster.this.version
+  version         = var.cluster_version
   // ノードに付与するロール
   node_role_arn   = aws_iam_role.eks_node_role.arn
   // ノードを配置するサブネット
-  subnet_ids      = data.aws_eks_cluster.this.vpc_config[0].subnet_ids
+  subnet_ids      = var.cluster_subnet_ids
   // キャパシティタイプ(SPOT, ON_DEMAND)
   capacity_type = "SPOT"  // スポット料金表: https://aws.amazon.com/jp/ec2/spot/pricing/
   // インスタンスタイプ

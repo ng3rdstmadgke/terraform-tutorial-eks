@@ -1,5 +1,6 @@
 locals {
-  cluster_name = data.terraform_remote_state.base.outputs.cluster_name
+  project_dir = data.terraform_remote_state.base.outputs.project_dir
+  cluster_name = data.terraform_remote_state.cluster.outputs.cluster_name
   vpc_id = data.terraform_remote_state.network.outputs.vpc_id
 }
 
@@ -9,6 +10,18 @@ data terraform_remote_state "base" {
   config = {
     bucket = "terraform-tutorial-eks-tfstate"
     key    = "mido/dev/base/terraform.tfstate"
+    region = "ap-northeast-1"
+    encrypt = true
+    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+  }
+}
+
+data terraform_remote_state "cluster" {
+  backend = "s3"
+
+  config = {
+    bucket = "terraform-tutorial-eks-tfstate"
+    key    = "mido/dev/cluster/terraform.tfstate"
     region = "ap-northeast-1"
     encrypt = true
     dynamodb_table = "terraform-tutorial-eks-tfstate-lock"

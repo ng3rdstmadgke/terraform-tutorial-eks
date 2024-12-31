@@ -25,3 +25,7 @@ locals {
 output "cluster_name" {
   value = local.cluster_name
 }
+
+output "project_dir" {
+  value = abspath("${path.module}/../../../..")
+}
