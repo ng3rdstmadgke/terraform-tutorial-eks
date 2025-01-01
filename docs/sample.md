@@ -8,10 +8,6 @@ devcontainerに含まれています。
 
 # ■ デプロイ
 
-```bash
-cd sample
-```
-
 ## ベーススタック
 
 
