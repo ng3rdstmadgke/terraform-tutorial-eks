@@ -346,7 +346,7 @@ terraform {
   backend "s3" {
     // tfstate保存先のs3バケットとキー
     bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXXXXX/dev/base/terraform.tfstate"  // EDIT: xxxxxx に重複しない任意の値を指定してください
+    key    = "XXXXX/dev/base/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
     region = "ap-northeast-1"
     encrypt = true
     // tfstateファイルのロック情報をDynamoDBで管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
@@ -365,11 +365,13 @@ terraform {
 
 ## 変数と出力値の定義
 
+※ `EDIT: ...` コメントの項目を各自編集してください
+
 `terraform/envs/dev/base/main.tf`
 
 ```tf
 locals {
-  cluster_name = "tte-mido-dev"
+  cluster_name = "tte-XXXXX-dev"  // EDIT: XXXXX に重複しない任意の値を指定してください
 }
 
 output "cluster_name" {
