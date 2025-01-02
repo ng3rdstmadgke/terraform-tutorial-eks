@@ -45,7 +45,7 @@ awsならawsプロバイダ、GCPならgoogleプロバイダといった具合�
 
 - [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 
-```hcl
+```tf
 terraform {
   required_providers { // 必要なプロバイダを定義
     aws = { // awsプロバイダのインストール
@@ -74,7 +74,7 @@ provider "aws" { // awsプロバイダの設定
 - [aws_instance | aws provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
 
 
-```hcl
+```tf
 resource "aws_instance" "some" {
   ami           = "ami-a1b2c3d4"
   instance_type = "t2.micro"
@@ -94,7 +94,7 @@ Meta-Argumentsには、リソースの依存関係を明確にするための `d
 
 初回デプロイ後に変更・削除されないALBを作る例
 
-```hcl
+```tf
 resource "aws_lb" "app_alb" {
   name               = "app-alb"
   load_balancer_type = "application"
@@ -125,7 +125,7 @@ resource "aws_lb" "app_alb" {
 
 リストに定義されている名前で複数のバケットを作成する例
 
-```hcl
+```tf
 locals {
   buckets = ["assets", "media"]
 }
@@ -138,7 +138,7 @@ resource "aws_s3_bucket" "example" {
 
 指定されたポートへの入力を許可するセキュリティグループの例
 
-```hcl
+```tf
 locals {
   ingress_ports = [22, 80, 443]
 }
@@ -180,7 +180,7 @@ resource "aws_security_group" "example" {
 
 - [aws_ami | aws provider]()https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance
 
-```hcl
+```tf
 data "aws_ami" "this" {  // 既存のamiの参照を取得
   most_recent = true
   owners      = ["amazon"]
@@ -218,7 +218,7 @@ resource "aws_instance" "some" {  // amiの参照を指定してEC2インスタ�
 ※ `type` には [Types and Values | Terraform](https://developer.hashicorp.com/terraform/language/expressions/types) の型が指定できます。
 
 
-```hcl
+```tf
 
 variable "image_id" {
   type = string
@@ -239,7 +239,7 @@ resource "aws_instance" "some" {
 `output` ブロックはモジュールの出力値を定義します。(いわゆる関数における戻り値です。)  
 `output` ブロックで定義した出力値は、モジュールの外から参照できます。別のモジュールに値を引き渡したいときに利用します。
 
-```hcl
+```tf
 
 resource "aws_instance" "some" {
   ami           = "ami-xxxxx"
@@ -258,7 +258,7 @@ output instance_arn {
 ローカル変数には、モジュール内で何度も繰り返し利用する値などを定義します。(いわゆる関数におけるローカル変数です。)  
 
 
-```hcl
+```tf
 
 locals {
   instance_type = "t2.micro"
@@ -298,7 +298,7 @@ resource "aws_instance" "other" {
 
 `terraform/main.tf` から `alb` モジュールを利用するには、下記のように実装します。
 
-```hcl
+```tf
 module "some_alb" {
   source = "./alb"
   // albモジュールが variable を持つ場合は引数として与えます
@@ -316,7 +316,7 @@ retource "aws_xxxxxxxxxxx" "xxxxxxxxx" {
 
 ※ 公開されているモジュールは [Modules Registry | Terraform](https://registry.terraform.io/browse/modules) から検索します。
 
-```hcl
+```tf
 module "iam_account" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-account"
 
