@@ -194,3 +194,206 @@ VPC, Subnet, EC2をデプロイするTerraformを考えると、モノリシッ�
 ※ 循環依存しない、安定度の高いコンポーネントに依存するようにします。
 
 ![](../docs/drawio/stack.drawio.png)
+
+# ■ 環境構築
+
+## ツール類のインストール
+
+Terraform, aws-cli, kubectl, k9s, helmなどのパッケージはdevcontainerに含まれています。  
+インストール方法は [.devcontainer/Dockerfile](../.devcontainer/Dockerfile)を参照してください。
+
+## ディレクトリ構成
+
+チュートリアルのソースはすべて `tutorial` ディレクトリ配下に配置します。  
+
+```bash
+cd $PROJECT_DIR/tutorial
+```
+
+ディレクトリ構成
+
+```
+tutorial/
+  plugin/
+    albc/                       # helmでALBCをインストールするための手順やリソースなど
+    metrics-server/             # helmでmetrics-serverをインストールするための手順やリソースなど
+    secret-store-csi-driver/    # helmでsecret-store-csi-driverをインストールするための手順やリソースなど
+  service/
+    keycloak/                   # keycloakをEKSにデプロイするためのマニフェストファイルなど
+  terraform/
+    envs/                       # dev, stg, prd など、各環境のリソース作成のエントリーポイントとなるディレクトリを格納
+      dev/
+        base/                   # いろいろなコンポーネントで利用される共通変数など
+        network/                # VPC, サブネットなど
+        cluster/                # EKSクラスタ
+        node-group/             # EKSのノードグループ, 起動テンプレートなど
+        addon/                  # EKSのアドオン関連
+        plugin/                 # helmでインストールするチャートに付随するリソース
+        service/                # EKSにデプロイするサービスに付随するリソース
+    modules/                    # サービス毎・ライフサイクル毎にある程度リソースをグループ化したモジュールを配置
+      albc/                     # AWS Load Balancer Controllerのインストールと関連リソース定義
+      cluster/                  # EKSクラスタ
+      ebs-csi-driver/           # ebs-csi-driverに付随するリソース
+      keycloak/                 # keycloakサービスに付随するリソース
+      node-group-bottlerocket/  # bottlerocketのノードグループを作成するモジュール
+```
+
+## .gitignore配置
+
+[Terraform.gitignore - gitignore | Github](https://github.com/github/gitignore/blob/main/Terraform.gitignore)
+
+`terraform/.gitignore`
+
+```ini
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files, which are likely to contain sensitive data, such as
+# password, private keys, and other secrets. These should not be part of version 
+# control as they are data points which are potentially sensitive and subject 
+# to change depending on the environment.
+*.tfvars
+*.tfvars.json
+
+# Ignore override files as they are usually used to override resources locally and so
+# are not checked in
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore transient lock info files created by terraform apply
+.terraform.tfstate.lock.info
+
+# Include override files you do wish to add to version control using negated pattern
+# !example_override.tf
+
+# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
+# example: *tfplan*
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+```
+
+# ■ baseコンポーネント作成
+
+いろいろなコンポーネントで利用される変数を定義するbaseコンポーネントを作成します。
+
+## tfstate管理用s3バケット作成
+
+terraformのtfstateを管理するS3バケットを作成します。
+
+```bash
+# tfstateファイルをS3で管理する
+# https://developer.hashicorp.com/terraform/language/settings/backends/s3
+TFSTATE_BUCKET="terraform-tutorial-eks-tfstate"
+
+aws s3api create-bucket \
+  --bucket $TFSTATE_BUCKET \
+  --region ap-northeast-1 \
+  --create-bucket-configuration LocationConstraint=ap-northeast-1
+
+```
+
+## tfstateロック用のdynamodbテーブルを作成
+
+terraformを複数個所から同時にデプロイできないように、dynamoDBにtfstateをロックするためのテーブルを作成します。
+
+```bash
+# tfstateファイルのロック情報をDynamoDBで管理する
+# https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
+
+TFSTATE_LOCK_TABLE="terraform-tutorial-eks-tfstate-lock"
+
+aws dynamodb create-table \
+    --table-name $TFSTATE_LOCK_TABLE \
+    --attribute-definitions AttributeName=LockID,AttributeType=S \
+    --key-schema AttributeName=LockID,KeyType=HASH \
+    --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
+    --region ap-northeast-1
+```
+
+## tfstateとプロバイダの設定
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+- `terraform`
+  - `required_version`  
+  インストールしてあるTerraformのバージョンを指定します。 ( `terraform --version` )
+  - `backend`  
+  terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。
+  - `required_providers`  
+  利用するプロバイダを指定します。今回は [AWSプロバイダ](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用します。
+- `provider`  
+awsプロバイダの設定を記述します。
+
+`terraform/envs/dev/base/main.tf`
+
+```tf
+terraform {
+  required_version = "~> 1.10"
+
+  // tfstateファイルをs3で管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3
+  backend "s3" {
+    // tfstate保存先のs3バケットとキー
+    bucket = "terraform-tutorial-eks-tfstate"
+    key    = "XXXXXXXX/dev/base/terraform.tfstate"  // EDIT: xxxxxx に重複しない任意の値を指定してください
+    region = "ap-northeast-1"
+    encrypt = true
+    // tfstateファイルのロック情報をDynamoDBで管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
+    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+  }
+
+  required_providers {
+    // AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.82.2"
+    }
+  }
+}
+```
+
+## 変数と出力値の定義
+
+`terraform/envs/dev/base/main.tf`
+
+```tf
+locals {
+  cluster_name = "tte-mido-dev"
+}
+
+output "cluster_name" {
+  value = local.cluster_name
+}
+
+output "project_dir" {
+  value = abspath("${path.module}/../../../..")
+}
+```
+
+## terraformデプロイ
+
+terraformを実行してVPCを作成してみましょう
+
+```bash
+cd $PROJECT_DIR/tutorial/terraform/envs/dev/base
+
+# 初期化
+terraform init
+
+# デプロイ内容確認
+terraform plan
+
+# デプロイ
+terraform apply -auto-approve
+```
