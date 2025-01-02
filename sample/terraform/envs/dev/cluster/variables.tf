@@ -6,8 +6,10 @@ variable access_entries {
 
 locals {
   cluster_name = data.terraform_remote_state.base.outputs.cluster_name
+  private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
 }
 
+// baseコンポーネントのステートを参照
 data terraform_remote_state "base" {
   backend = "s3"
 
@@ -20,6 +22,7 @@ data terraform_remote_state "base" {
   }
 }
 
+// networkコンポーネントのステートを参照
 data "terraform_remote_state" "network" {
   // https://developer.hashicorp.com/terraform/language/state/remote-state-data#argument-reference
   backend = "s3"

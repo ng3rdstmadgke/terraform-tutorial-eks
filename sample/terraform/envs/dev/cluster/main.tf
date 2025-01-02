@@ -34,7 +34,7 @@ provider "aws" {
 module cluster {
   source = "../../../modules/cluster"
   cluster_name = local.cluster_name
-  subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
+  subnet_ids = local.private_subnet_ids
   access_entries = var.access_entries
 }
 

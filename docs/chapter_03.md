@@ -10,6 +10,7 @@ Chapter3 ネットワーク作成
 
 # ■ 変数定義
 
+※ `EDIT: ...` コメントの項目を各自編集してください
 
 `terraform/envs/dev/network/variables.tf`
 
@@ -47,6 +48,8 @@ data "terraform_remote_state" "base" {
 
 
 ## tfstateとプロバイダの設定
+
+※ `EDIT: ...` コメントの項目を各自編集してください
 
 `terraform/envs/dev/network/main.tf`
 
