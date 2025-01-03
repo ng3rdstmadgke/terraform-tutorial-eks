@@ -89,6 +89,9 @@ resource "aws_security_group" "alb_ingress" {
   }
 }
 
+/**
+ * ALBCをHelmでインストールするためのvalues.yaml
+ */
 resource "local_file" "albc_values" {
   filename = "${var.project_dir}/plugin/albc/tmp/values.yaml"
   content = templatefile(
