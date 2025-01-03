@@ -9,13 +9,13 @@ Chapter4 クラスタ作成
 <img width="900px" src="drawio/chapter_04/architecture.drawio.png">
 
 
-# ■ EKSクラスタモジュールの定義
+# ■ clusterモジュールの定義
 
 EKSクラスタとその関連リソースをモジュールとして、ひとまとめで定義します。
 
 ## モジュールの変数定義
 
-モジュール夜呼び出す際に指定する入力値の定義を行います
+モジュールを呼び出す際に指定する入力値の定義を行います
 
 - `cluster_name` クラスタ名
 - `subnet_ids` EKSクラスタがノードを立ち上げるサブネット
@@ -40,7 +40,7 @@ locals {
 }
 ```
 
-## EKSクラスタモジュール本体
+## モジュールのリソース
 
 ### ロググループ
 
@@ -381,7 +381,7 @@ output "eks_cluster" {
 
 # ■ clusterコンポーネントの定義
 
-先ほど定義したEKSクラスタモジュールを呼び出し、EKSクラスタを作成します。
+先ほど定義したclusterモジュールを呼び出し、EKSクラスタを作成します。
 
 ## 変数定義
 
@@ -486,8 +486,9 @@ provider "aws" {
 }
 ```
 
-## EKSクラスタモジュールの呼び出し
+## clusterモジュールの呼び出し
 
+先ほど定義した clusterモジュールを呼び出します。
 
 `terraform/envs/dev/cluster/main.tf`
 
@@ -587,7 +588,7 @@ output "subnet_ids" {
 
 # ■ terraformデプロイ
 
-terraformを実行してVPCを作成してみましょう
+terraformを実行してEKSを作成してみましょう
 
 ```bash
 cd $PROJECT_DIR/tutorial/terraform/envs/dev/cluster
