@@ -1,104 +1,23 @@
-/**
- * EKSクラスタ
- *
- * NOTE:
- * EKS Auto Mode 利用時は以下の3つの設定がすべて true でなければならない。逆に無効にする場合はすべて false でなければならない
- * - compute_config.enabled
- * - storage_config.block_storage.enabled
- * - kubernetes_network_config.elastic_load_balancing.enabled
- */
-resource "aws_eks_cluster" "this" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_cluster
+ /**
+  * コントロールプレーンのログを保存するロググループ
+  *
+  * ロググループ名は /aws/eks/{MY_CLUSTER}/cluster で固定
+  * 参考: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/control-plane-logs.html
+  *
+  */
+resource "aws_cloudwatch_log_group" "eks_control_plane" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group
 
-  name = var.cluster_name
+  name = "/aws/eks/${var.cluster_name}/cluster"
 
-  role_arn = aws_iam_role.cluster_role.arn
+  // ログの保持期間
+  retention_in_days = 30
 
-  access_config {
-    authentication_mode = "API_AND_CONFIG_MAP"
-    // TerraformをデプロイしたRoleにkubernetesAPIへのアクセス権を付与する
-    bootstrap_cluster_creator_admin_permissions = true
+  tags = {
+    Name = "/aws/eks/${var.cluster_name}/cluster"
   }
-
-  vpc_config {
-    // EKSのプライベートAPIエンドポイントの有効化
-    endpoint_private_access = true
-    // EKSのパブリックAPIエンドポイントの有効化
-    endpoint_public_access = true
-    // パブリックAPIエンドポイントにアクセス可能なネットワーク
-    public_access_cidrs = [
-      "0.0.0.0/0"
-    ]
-    // コントロールプレーンとワーカーノード間の通信を許可するためのSG
-    security_group_ids = []
-    // ワーカーノードが配置されるサブネット (コントロールプレーンとの通信のため、cross-account ENIが作成される)
-    subnet_ids = var.subnet_ids
-  }
-
-  kubernetes_network_config {
-    // KubernetesのPodとServiceに割り当てられるIPのファミリー (ipv4 or ipv6)
-    ip_family = "ipv4"
-    // KubernetesポッドとサービスのIPアドレスを割り当てるCIDRブロック (変更不可)
-    // VPCピアリングやTGWで接続されている他のネットワークリソースと重複しないブロックを指定しなければならない。
-    // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 のブロックの中から指定
-    service_ipv4_cidr = "172.20.0.0/16"
-
-    // EKS Auto Mode 利用時のロードバランシング機能の設定
-    elastic_load_balancing {
-      enabled = false
-    }
-  }
-
-  // vpc-cni, kube-proxy, corednsといったアドオンを管理対象外のアドオンとしてクラスタ作成時にインストールするか
-  // NOTE: この値を変更すると新しいクラスタが強制的に作成されるので注意
-  bootstrap_self_managed_addons = true
-
-  // CloudWatchLogsに出力するコントロールプレーンのログ設定: https://docs.aws.amazon.com/eks/latest/userguide/control-plane-logs.html
-  enabled_cluster_log_types = [ "api", "audit", "authenticator", "controllerManager", "scheduler" ]
-
-
-  // 指定したKMSのキーでetcdに保存されているKubernetesのリソースを暗号化する
-  encryption_config {
-    provider {
-      key_arn = aws_kms_key.kubernetes_encription.arn
-    }
-    // 暗号化するリソース
-    resources = [ "secrets" ]
-  }
-
-  // クラスタのアップデートポリシー
-  upgrade_policy {
-    // STANDARD: 標準サポート終了時に自動的にアップグレード
-    // EXTENDED: 標準サポート終了時に拡張サポートに入る
-    support_type = "EXTENDED"
-  }
-
-  // Kubernetesのバージョン
-  version = "1.31"
-
-  // ゾーンシフト (障害時などに対象のAZを切り離す機能)
-  zonal_shift_config {
-    enabled = false
-  }
-
-  // EKS Auto Mode 利用時のcomputeの設定
-  compute_config {
-    enabled = false
-  }
-  // EKS Auto Mode 利用時のストレージ設定
-  storage_config {
-    block_storage {
-      enabled = false
-    }
-  }
-
-  // Hybrid Nodes利用時の設定
-  // remote_network_config {}
-
-  depends_on = [
-    aws_cloudwatch_log_group.eks_control_plane
-  ]
 }
+
 
 /**
  * クラスターロール
@@ -240,6 +159,110 @@ resource "aws_kms_alias" "kubernetes_encription" {
   target_key_id = aws_kms_key.kubernetes_encription.key_id
 }
 
+
+/**
+ * EKSクラスタ
+ *
+ * NOTE:
+ * EKS Auto Mode 利用時は以下の3つの設定がすべて true でなければならない。逆に無効にする場合はすべて false でなければならない
+ * - compute_config.enabled
+ * - storage_config.block_storage.enabled
+ * - kubernetes_network_config.elastic_load_balancing.enabled
+ */
+resource "aws_eks_cluster" "this" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_cluster
+
+  name = var.cluster_name
+
+  role_arn = aws_iam_role.cluster_role.arn
+
+  access_config {
+    authentication_mode = "API_AND_CONFIG_MAP"
+    // TerraformをデプロイしたRoleにkubernetesAPIへのアクセス権を付与する
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
+  vpc_config {
+    // EKSのプライベートAPIエンドポイントの有効化
+    endpoint_private_access = true
+    // EKSのパブリックAPIエンドポイントの有効化
+    endpoint_public_access = true
+    // パブリックAPIエンドポイントにアクセス可能なネットワーク
+    public_access_cidrs = [
+      "0.0.0.0/0"
+    ]
+    // コントロールプレーンとワーカーノード間の通信を許可するためのSG
+    security_group_ids = []
+    // ワーカーノードが配置されるサブネット (コントロールプレーンとの通信のため、cross-account ENIが作成される)
+    subnet_ids = var.subnet_ids
+  }
+
+  kubernetes_network_config {
+    // KubernetesのPodとServiceに割り当てられるIPのファミリー (ipv4 or ipv6)
+    ip_family = "ipv4"
+    // KubernetesポッドとサービスのIPアドレスを割り当てるCIDRブロック (変更不可)
+    // VPCピアリングやTGWで接続されている他のネットワークリソースと重複しないブロックを指定しなければならない。
+    // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 のブロックの中から指定
+    service_ipv4_cidr = "172.20.0.0/16"
+
+    // EKS Auto Mode 利用時のロードバランシング機能の設定
+    elastic_load_balancing {
+      enabled = false
+    }
+  }
+
+  // vpc-cni, kube-proxy, corednsといったアドオンを管理対象外のアドオンとしてクラスタ作成時にインストールするか
+  // NOTE: この値を変更すると新しいクラスタが強制的に作成されるので注意
+  bootstrap_self_managed_addons = true
+
+  // CloudWatchLogsに出力するコントロールプレーンのログ設定: https://docs.aws.amazon.com/eks/latest/userguide/control-plane-logs.html
+  enabled_cluster_log_types = [ "api", "audit", "authenticator", "controllerManager", "scheduler" ]
+
+
+  // 指定したKMSのキーでetcdに保存されているKubernetesのリソースを暗号化する
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.kubernetes_encription.arn
+    }
+    // 暗号化するリソース
+    resources = [ "secrets" ]
+  }
+
+  // クラスタのアップデートポリシー
+  upgrade_policy {
+    // STANDARD: 標準サポート終了時に自動的にアップグレード
+    // EXTENDED: 標準サポート終了時に拡張サポートに入る
+    support_type = "EXTENDED"
+  }
+
+  // Kubernetesのバージョン
+  version = "1.31"
+
+  // ゾーンシフト (障害時などに対象のAZを切り離す機能)
+  zonal_shift_config {
+    enabled = false
+  }
+
+  // EKS Auto Mode 利用時のcomputeの設定
+  compute_config {
+    enabled = false
+  }
+  // EKS Auto Mode 利用時のストレージ設定
+  storage_config {
+    block_storage {
+      enabled = false
+    }
+  }
+
+  // Hybrid Nodes利用時の設定
+  // remote_network_config {}
+
+  depends_on = [
+    aws_cloudwatch_log_group.eks_control_plane
+  ]
+}
+
+
 /**
  * IRSAを利用するため、IAMにEKSのOIDCプロバイダを登録
  * 
@@ -252,26 +275,4 @@ resource "aws_iam_openid_connect_provider" "default" {
   client_id_list = [
     "sts.amazonaws.com",
   ]
-}
-
-
-
- /**
-  * コントロールプレーンのログを保存するロググループ
-  *
-  * ロググループ名は /aws/eks/{MY_CLUSTER}/cluster で固定
-  * 参考: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/control-plane-logs.html
-  *
-  */
-resource "aws_cloudwatch_log_group" "eks_control_plane" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group
-
-  name = "/aws/eks/${var.cluster_name}/cluster"
-
-  // ログの保持期間
-  retention_in_days = 30
-
-  tags = {
-    Name = "/aws/eks/${var.cluster_name}/cluster"
-  }
 }
