@@ -15,6 +15,12 @@ EKSクラスタとその関連リソースをモジュールとして、ひと�
 
 ## モジュールの変数定義
 
+モジュール夜呼び出す際に指定する入力値の定義を行います
+
+- `cluster_name` クラスタ名
+- `subnet_ids` EKSクラスタがノードを立ち上げるサブネット
+- `access_entries` KubernetesのAPIにアクセスできるIAMユーザーもしくはIAMロールのARN
+
 `terraform/modules/cluster/variables.tf`
 
 ```tf
@@ -34,15 +40,200 @@ locals {
 }
 ```
 
-## EKSクラスタの定義
+## EKSクラスタモジュール本体
 
-クラスタモジュールでは以下のリソースを作成します。
+### ロググループ
 
-- EKSクラスタ本体
-- クラスタロール
-- etcdに保存されるシークレットを暗号化するためのKMSキー
-- OIDCプロバイダ
-- コントロールプレーンのログを保存するロググループ
+コントロールプレーンログを保持するロググループを定義します。  
+ロググループ名は `/aws/eks/クラスタ名/cluster` で固定で、あらかじめ作っておかないと自動作成されてしまうので明示的に定義しておきます。
+
+参考: [コントロールプレーンログを CloudWatch Logs に送信する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/control-plane-logs.html)
+
+`terraform/modules/cluster/main.tf`
+
+```tf
+ /**
+  * コントロールプレーンのログを保存するロググループ
+  */
+resource "aws_cloudwatch_log_group" "eks_control_plane" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group
+
+  name = "/aws/eks/${var.cluster_name}/cluster"
+
+  // ログの保持期間
+  retention_in_days = 30
+
+  tags = {
+    Name = "/aws/eks/${var.cluster_name}/cluster"
+  }
+}
+
+```
+
+### クラスタロール
+
+EKSのコントロールプレーンがAWS APIを呼び出すためのIAMロール。ノード管理などで利用されます。
+
+参考: [Amazon EKS クラスター の IAM ロール | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/cluster-iam-role.html)
+
+`terraform/modules/cluster/main.tf`
+
+```tf
+/**
+ * クラスターロール
+ */
+resource "aws_iam_role" "cluster_role" {
+  name = "${var.cluster_name}-EKSClusterRole"
+  assume_role_policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EKSClusterAssumeRole"
+        Action    = [ "sts:TagSession", "sts:AssumeRole" ]
+        Effect    = "Allow"
+        Principal = { Service = "eks.amazonaws.com" }
+      }
+    ]
+  })
+}
+
+// aws管理ポリシー
+resource "aws_iam_role_policy_attachment" "aws_managed_policy" {
+  for_each = toset([
+    "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSComputePolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController",
+  ])
+  role = aws_iam_role.cluster_role.name
+  policy_arn = each.key
+}
+
+
+// etcdに保存されたKubernetesシークレットの暗号化に利用するKMSの操作権限
+resource "aws_iam_policy" "secret_encription_policy" {
+  name = "${var.cluster_name}-SecretEncriptionPolicy"
+  policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ListGrants",
+          "kms:DescribeKey"
+        ],
+        "Resource": aws_kms_key.kubernetes_encription.arn,
+      }
+    ]
+  })
+}
+resource "aws_iam_role_policy_attachment" "secret_encription_policy" {
+  role = aws_iam_role.cluster_role.name
+  policy_arn = aws_iam_policy.secret_encription_policy.arn
+}
+```
+
+### KMSキー
+
+Kubernetesのシークレットリソースの暗号化を行うためのKMSキーを定義します。  
+KMSキーはaccess_entriesに設定したIAMユーザー・IAMロールが使用できる必要があります。
+
+参考: [既存のクラスターで AWS KMS を使用して Kubernetes シークレットを暗号化する](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/enable-kms.html)
+
+`terraform/modules/cluster/main.tf`
+
+```tf
+/**
+ * Kubernetesのリソースを暗号化するためのKMSキー
+ */
+resource "aws_kms_key" "kubernetes_encription" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key
+
+  description = "${var.cluster_name} cluster encryption key"
+  is_enabled = true
+  key_usage = "ENCRYPT_DECRYPT"
+  multi_region = false
+  // キーローテーションの設定
+  enable_key_rotation = true
+  rotation_period_in_days = 365
+  // 暗号化と復号化を行うため対象キーでなければならない
+  // キー仕様リファレンス: https://docs.aws.amazon.com/ja_jp/kms/latest/developerguide/symm-asymm-choose-key-spec.html
+  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  policy = jsonencode(
+    {
+      Statement = [
+        {
+          Sid     = "Default"
+          Effect  = "Allow"
+          Principal = {
+            AWS = "arn:aws:iam::${local.account_id}:root"
+          }
+          Action  = "kms:*"
+          Resource  = "*"
+        },
+        {
+          Sid     = "KeyAdministration"
+          Effect  = "Allow"
+          Principal = {
+            AWS = var.access_entries
+          }
+          Action  = [
+            "kms:Update*",
+            "kms:UntagResource",
+            "kms:TagResource",
+            "kms:ScheduleKeyDeletion",
+            "kms:Revoke*",
+            "kms:ReplicateKey",
+            "kms:Put*",
+            "kms:List*",
+            "kms:ImportKeyMaterial",
+            "kms:Get*",
+            "kms:Enable*",
+            "kms:Disable*",
+            "kms:Describe*",
+            "kms:Delete*",
+            "kms:Create*",
+            "kms:CancelKeyDeletion",
+          ]
+          Resource  = "*"
+        },
+        {
+          Sid     = "KeyUsage"
+          Effect  = "Allow"
+          Principal = {
+            AWS = aws_iam_role.cluster_role.arn
+          }
+          Action  = [
+            "kms:ReEncrypt*",
+            "kms:GenerateDataKey*",
+            "kms:Encrypt",
+            "kms:DescribeKey",
+            "kms:Decrypt",
+          ]
+          Resource  = "*"
+        },
+      ]
+      Version   = "2012-10-17"
+    }
+  )
+}
+
+resource "aws_kms_alias" "kubernetes_encription" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias
+
+  name = "alias/eks/${var.cluster_name}"
+  target_key_id = aws_kms_key.kubernetes_encription.key_id
+}
+
+```
+
+### EKSクラスタ
+
+EKSクラスタ本体を定義します。 (EKSAutoModeはOFFです)
 
 `terraform/modules/cluster/main.tf`
 
@@ -148,147 +339,18 @@ resource "aws_eks_cluster" "this" {
     aws_cloudwatch_log_group.eks_control_plane
   ]
 }
-
-/**
- * クラスターロール
- */
-resource "aws_iam_role" "cluster_role" {
-  name = "${var.cluster_name}-EKSClusterRole"
-  assume_role_policy = jsonencode({
-    Version   = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "EKSClusterAssumeRole"
-        Action    = [ "sts:TagSession", "sts:AssumeRole" ]
-        Effect    = "Allow"
-        Principal = { Service = "eks.amazonaws.com" }
-      }
-    ]
-  })
-}
-
-// aws管理ポリシー
-resource "aws_iam_role_policy_attachment" "aws_managed_policy" {
-  for_each = toset([
-    "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy",
-    "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
-    "arn:aws:iam::aws:policy/AmazonEKSComputePolicy",
-    "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy",
-    "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy",
-    "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController",
-  ])
-  role = aws_iam_role.cluster_role.name
-  policy_arn = each.key
-}
+```
 
 
-// etcdに保存されたKubernetesシークレットの暗号化に利用するKMSの操作権限
-resource "aws_iam_policy" "secret_encription_policy" {
-  name = "${var.cluster_name}-SecretEncriptionPolicy"
-  policy = jsonencode({
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Effect": "Allow",
-        "Action": [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ListGrants",
-          "kms:DescribeKey"
-        ],
-        "Resource": aws_kms_key.kubernetes_encription.arn,
-      }
-    ]
-  })
-}
-resource "aws_iam_role_policy_attachment" "secret_encription_policy" {
-  role = aws_iam_role.cluster_role.name
-  policy_arn = aws_iam_policy.secret_encription_policy.arn
-}
+### OIDCプロバイダ
 
+IRSAを行うためのOIDCプロバイダを定義します。
 
-/**
- * Kubernetesのリソースを暗号化するためのKMSキー
- */
-resource "aws_kms_key" "kubernetes_encription" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key
+参考: IRSAについて: [EKSの認証・認可の仕組み解説 | Zenn](https://zenn.dev/take4s5i/articles/aws-eks-authentication#iam-roles-for-service-accounts(irsa))
 
-  description = "${var.cluster_name} cluster encryption key"
-  is_enabled = true
-  key_usage = "ENCRYPT_DECRYPT"
-  multi_region = false
-  // キーローテーションの設定
-  enable_key_rotation = true
-  rotation_period_in_days = 365
-  // 暗号化と復号化を行うため対象キーでなければならない
-  // キー仕様リファレンス: https://docs.aws.amazon.com/ja_jp/kms/latest/developerguide/symm-asymm-choose-key-spec.html
-  customer_master_key_spec = "SYMMETRIC_DEFAULT"
-  policy = jsonencode(
-    {
-      Statement = [
-        {
-          Sid     = "Default"
-          Effect  = "Allow"
-          Principal = {
-            AWS = "arn:aws:iam::${local.account_id}:root"
-          }
-          Action  = "kms:*"
-          Resource  = "*"
-        },
-        {
-          Sid     = "KeyAdministration"
-          Effect  = "Allow"
-          Principal = {
-            AWS = var.access_entries
-          }
-          Action  = [
-            "kms:Update*",
-            "kms:UntagResource",
-            "kms:TagResource",
-            "kms:ScheduleKeyDeletion",
-            "kms:Revoke*",
-            "kms:ReplicateKey",
-            "kms:Put*",
-            "kms:List*",
-            "kms:ImportKeyMaterial",
-            "kms:Get*",
-            "kms:Enable*",
-            "kms:Disable*",
-            "kms:Describe*",
-            "kms:Delete*",
-            "kms:Create*",
-            "kms:CancelKeyDeletion",
-          ]
-          Resource  = "*"
-        },
-        {
-          Sid     = "KeyUsage"
-          Effect  = "Allow"
-          Principal = {
-            AWS = aws_iam_role.cluster_role.arn
-          }
-          Action  = [
-            "kms:ReEncrypt*",
-            "kms:GenerateDataKey*",
-            "kms:Encrypt",
-            "kms:DescribeKey",
-            "kms:Decrypt",
-          ]
-          Resource  = "*"
-        },
-      ]
-      Version   = "2012-10-17"
-    }
-  )
-}
+`terraform/modules/cluster/main.tf`
 
-resource "aws_kms_alias" "kubernetes_encription" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias
-
-  name = "alias/eks/${var.cluster_name}"
-  target_key_id = aws_kms_key.kubernetes_encription.key_id
-}
-
+```tf
 /**
  * IRSAを利用するため、IAMにEKSのOIDCプロバイダを登録
  * 
@@ -302,33 +364,12 @@ resource "aws_iam_openid_connect_provider" "default" {
     "sts.amazonaws.com",
   ]
 }
-
-
-
- /**
-  * コントロールプレーンのログを保存するロググループ
-  *
-  * ロググループ名は /aws/eks/{MY_CLUSTER}/cluster で固定
-  * 参考: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/control-plane-logs.html
-  *
-  */
-resource "aws_cloudwatch_log_group" "eks_control_plane" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group
-
-  name = "/aws/eks/${var.cluster_name}/cluster"
-
-  // ログの保持期間
-  retention_in_days = 30
-
-  tags = {
-    Name = "/aws/eks/${var.cluster_name}/cluster"
-  }
-}
-
 ```
 
 
 ## モジュールの出力値の定義
+
+作成したEKSクラスタを出力値とします。
 
 `terraform/modules/cluster/outputs.tf`
 
@@ -343,6 +384,9 @@ output "eks_cluster" {
 先ほど定義したEKSクラスタモジュールを呼び出し、EKSクラスタを作成します。
 
 ## 変数定義
+
+- `access_entries` : KubernetesのAPIにアクセス可能なIAMユーザまたはIAMロールのARN
+
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
@@ -464,14 +508,13 @@ module cluster {
 指定したIAMユーザー、IAMロールにKubernetes APIへのアクセス権限を付与します。  
 この設定を行うことで、指定されたロールからKubernetesのリソース(podなど)を操作できるようになります。  
 
+参考: [EKS アクセスエントリを使用して Kubernetes へのアクセスを IAM ユーザーに許可する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-entries.html)
 
 `terraform/envs/dev/cluster/main.tf`
 
 ```tf
 /**
  * IAMユーザー・ロールにkubernetesAPIへのアクセス権限を付与
- * - EKS アクセスエントリを使用して Kubernetes へのアクセスを IAM ユーザーに許可する | AWS
- *   https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-entries.html
  */
 resource "aws_eks_access_entry" "admin" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry
@@ -557,4 +600,15 @@ terraform plan
 
 # デプロイ
 terraform apply -auto-approve
+```
+
+# ■ Kubernetesへのアクセス
+
+```bash
+# ~/.kube/configに作成したEKSクラスタを設定
+CLUSTER_NAME=$(terraform output -raw cluster_name)
+aws eks update-kubeconfig --name $CLUSTER_NAME
+
+# EKSクラスタを確認
+k9s
 ```
