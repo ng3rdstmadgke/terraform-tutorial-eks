@@ -53,9 +53,10 @@ locals {
 
 ### IAMロール
 
-`aws-load-balancer-controller` サービスアカウントに紐づけるIAMロールを定義し、Pod Identityに登録します。
+`aws-load-balancer-controller` サービスアカウントに紐づけるIAMロールを定義し、Pod Identityに登録します。  
+必要な権限は `https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json` からダウンロードします。  
 
-参考: [Install AWS Load Balancer Controller with manifests](https://docs.aws.amazon.com/eks/latest/userguide/lbc-manifest.html)
+参考: [マニフェストを使用して AWS Load Balancer Controller インストールする](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-manifest.html)
 
 `terraform/modules/albc/main.tf`
 
@@ -462,3 +463,12 @@ helm upgrade --install secrets-provider-aws aws-secrets-manager/secrets-store-cs
   --namespace kube-system \
   --create-namespace
 ```
+
+# ■ 確認
+
+k9sで以下を確認します
+
+- kube-systemネームスペースのdeploymentに `aws-load-balancer-controller` が存在する
+- kube-systemネームスペースのdeploymentに `metrics-server` が存在する
+- kube-systemネームスペースのdaemonsetに `csi-secrets-store-secrets-store-csi-driver` `secrets-provider-aws-secrets-store-csi-driver-provider-aws` が存在する
+- aws-load-balancer-controllerサービスアカウントのAnnotationsに ` eks.amazonaws.com/role-arn: arn:aws:iam::111111111111:role/xxxxx-dev-EKSIngressAWSLoadBalancerControllerRole` が設定されている

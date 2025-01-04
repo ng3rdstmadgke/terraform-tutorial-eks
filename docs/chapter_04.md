@@ -509,7 +509,10 @@ module cluster {
 指定したIAMユーザー、IAMロールにKubernetes APIへのアクセス権限を付与します。  
 この設定を行うことで、指定されたロールからKubernetesのリソース(podなど)を操作できるようになります。  
 
-参考: [EKS アクセスエントリを使用して Kubernetes へのアクセスを IAM ユーザーに許可する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-entries.html)
+※ aws-auth ConfigMapで設定することもできますが、 `authentication_mode=API_AND_CONFIG_MAP` を設定しているので、今回はアクセスエントリから設定します。
+
+
+参考: [IAM アイデンティティと Kubernetes のアクセス許可を関連付ける](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/grant-k8s-access.html#authentication-modes)
 
 `terraform/envs/dev/cluster/main.tf`
 
