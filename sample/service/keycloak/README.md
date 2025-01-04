@@ -1,3 +1,3 @@
 ```bash
-kubectl apply -f tmp/app.yaml
+kubectl apply -f $PROJECT_DIR/tutorial/service/keycloak/tmp/app.yaml
 ```

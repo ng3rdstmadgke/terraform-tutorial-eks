@@ -4,7 +4,8 @@ Chapter7 プラグインインストール
 
 # ■ 作るもの
 
-この章ではHelmを利用してEKS以下のチャートをインストールします。
+この章ではHelmを利用してEKS以下のチャートをインストールします。  
+インストールするにあたって必要なAWSリソースはpluginコンポーネントに定義していきます。  
 
 - `aws-load-balancer-controller`
 - `metrics-server`
@@ -214,6 +215,8 @@ output "alb_ingress_sg" {
 
 
 # ■ pluginコンポーネント
+
+ServiceコンポーネントはKubernetesのプラグインのインストールに必要なAWSリソースを定義するためのコンポーネントです。
 
 ## 変数定義
 
