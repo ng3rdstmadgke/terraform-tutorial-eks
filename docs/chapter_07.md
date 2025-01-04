@@ -376,7 +376,7 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --version "1.11.0" \
   --namespace "kube-system" \
   --create-namespace \
-  --values $PROJECT_DIR/sample/plugin/albc/tmp/values.yaml
+  --values $PROJECT_DIR/tutorial/plugin/albc/tmp/values.yaml
 ```
 
 # ■ metrics-server のインストール

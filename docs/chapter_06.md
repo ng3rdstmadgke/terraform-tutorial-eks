@@ -4,7 +4,12 @@ Chapter6 アドオンインストール
 
 # ■ 作るもの
 
-この章ではEKSのアドオンをインストールします。
+この章では以下のEKSのアドオンをインストールします。
+
+- `eks-pod-identity-agent`
+- `aws-ebs-csi-driver`
+- `snapshot-controller`
+
 
 <img width="900px" src="drawio/chapter_06/architecture.drawio.png">
 
