@@ -6,7 +6,13 @@ Chapter3 ネットワーク作成
 
 この章ではVPC、サブネットといったネットワークリソースを作成します。
 
+## 構成図
+
 <img width="900px" src="drawio/chapter_03/architecture.drawio.png">
+
+## コンポーネント
+
+<img width="800px" src="drawio/chapter_03/stack.drawio.png">
 
 # ■ 変数定義
 

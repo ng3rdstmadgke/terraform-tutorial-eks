@@ -294,6 +294,8 @@ terraform.rc
 
 いろいろなコンポーネントで利用される変数を定義するbaseコンポーネントを作成します。
 
+<img width="800px" src="drawio/chapter_02/stack.drawio.png">
+
 ## tfstate管理用s3バケット作成
 
 terraformのtfstateを管理するS3バケットを作成します。

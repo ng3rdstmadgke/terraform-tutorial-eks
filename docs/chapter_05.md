@@ -6,7 +6,13 @@ Chapter5 ノードグループ作成
 
 この章ではEKSのノードグループを作成します。
 
+## 構成図
+
 <img width="900px" src="drawio/chapter_05/architecture.drawio.png">
+
+## コンポーネント
+
+<img width="800px" src="drawio/chapter_05/stack.drawio.png">
 
 # ■ node-group-bottlerocketモジュール
 

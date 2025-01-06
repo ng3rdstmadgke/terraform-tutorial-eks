@@ -11,7 +11,13 @@ Chapter6 アドオンインストール
 - `snapshot-controller`
 
 
+## 構成図
+
 <img width="900px" src="drawio/chapter_06/architecture.drawio.png">
+
+## コンポーネント
+
+<img width="800px" src="drawio/chapter_06/stack.drawio.png">
 
 # ■ ebs-csi-driverモジュール
 

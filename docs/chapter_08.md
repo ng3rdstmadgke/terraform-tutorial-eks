@@ -8,7 +8,13 @@ Chapter8 keycloakの構築
 KeycloakのデプロイだけではなくRDSやSecretsManagerといった周辺リソースの作成まで行います。  
 これらのリソースは、EKSにデプロイするアプリケーションに付随するAWSリソースを定義するためのserviceコンポーネントに定義していきます。
 
+## 構成図
+
 <img width="900px" src="drawio/chapter_08/architecture.drawio.png">
+
+## コンポーネント
+
+<img width="800px" src="drawio/chapter_08/stack.drawio.png">
 
 # ■ keycloakモジュール
 

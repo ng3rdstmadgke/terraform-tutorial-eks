@@ -6,7 +6,14 @@ Chapter4 クラスタ作成
 
 この章ではEKSクラスタを作成します。
 
+## 構成図
+
 <img width="900px" src="drawio/chapter_04/architecture.drawio.png">
+
+## コンポーネント
+
+<img width="800px" src="drawio/chapter_04/stack.drawio.png">
+
 
 
 # ■ clusterモジュールの定義

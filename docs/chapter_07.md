@@ -15,7 +15,13 @@ Chapter7 プラグインインストール
 
 チャートのインストールはコマンドラインで行いますが、インストールに必要なAWSリソースはTerraformで定義します。
 
+## 構成図
+
 <img width="900px" src="drawio/chapter_07/architecture.drawio.png">
+
+## コンポーネント
+
+<img width="800px" src="drawio/chapter_07/stack.drawio.png">
 
 # ■ albcモジュール
 
