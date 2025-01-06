@@ -7,7 +7,7 @@ Chapter9 リソースの削除
 ## keycloakの削除
 
 ```bash
-kubectl delete -f $PROJECT_DIR/sample/service/keycloak/tmp/app.yaml
+kubectl delete -f $PROJECT_DIR/tutorial/service/keycloak/tmp/app.yaml
 ```
 
 ## チャートの削除
