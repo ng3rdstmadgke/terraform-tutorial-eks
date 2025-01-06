@@ -1,121 +1,64 @@
 /**
  * AWS Load Balancer ControllerがALBを作成するために必要なRoleを作成
+ *
+ * - Install AWS Load Balancer Controller with manifests
+ *   https://docs.aws.amazon.com/eks/latest/userguide/lbc-manifest.html
  */
-resource "aws_iam_role" "aws_loadbalancer_controller" {
-  name = "${var.app_name}-${var.stage}-EKSIngressAWSLoadBalancerControllerRole"
+resource "aws_iam_role" "albc" {
+  name = "${var.cluster_name}-EKSIngressAWSLoadBalancerControllerRole"
   assume_role_policy = jsonencode({
-    "Version": "2012-10-17"
-    "Statement": {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::${local.account_id}:oidc-provider/${local.oidc_provider}"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringLike": {
-          "${local.oidc_provider}:sub": "system:serviceaccount:${local.namespace}:*",
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowEksAuthToAssumeRoleForPodIdentity",
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "pods.eks.amazonaws.com"
+            },
+            "Action": [
+                "sts:AssumeRole",
+                "sts:TagSession"
+            ]
         }
-      }
-    }
+    ]
   })
 }
 
-resource "aws_iam_policy" "aws_loadbalancer_controller" {
-  name   = "${var.cluster_name}-EKSIngressAWSLoadBalancerControllerPolicy"
-  // IAMを設定する - ALBCインストール | aws: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-manifest.html#lbc-iam
-  // ファイルはこちらからDL: https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.7.2/docs/install/iam_policy.json
-  policy = file("${path.module}/iam_policy.json")
-}
+data "http" "albc" {
+  // https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http
 
-resource "aws_iam_role_policy_attachment" "aws_loadbalancer_controller" {
-  role = aws_iam_role.aws_loadbalancer_controller.name
-  policy_arn = aws_iam_policy.aws_loadbalancer_controller.arn
-}
-
-// IRSA(IAM Roles for Service Accounts)用のサービスアカウントを作成します。
-// https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/service_account
-resource "kubernetes_service_account" "aws_loadbalancer_controller" {
-  metadata {
-    name      = "aws-load-balancer-controller"
-    namespace = local.namespace
-    annotations = {
-      "eks.amazonaws.com/role-arn" = aws_iam_role.aws_loadbalancer_controller.arn
-    }
+  url = "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json"
+  request_headers = {
+    Accept = "application/json"
   }
 }
 
-/**
- * HelmチャートをClusterにインストールします。
- *
- * 参考
- *   - AWS Load Balancer Controller - Helmを使用してインストールする
- *     https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-helm.html
- *   - AWS Load Balancer Controller
- *     https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.7/
- */
+resource "aws_iam_policy" "albc" {
+  name   = "${var.cluster_name}-AwsLoadBalancerControllerPolicy"
+  policy = data.http.albc.response_body
+}
 
-//helm_release - helm - terraform: https://registry.terraform.io/providers/hashicorp/helm/latest/docs/resources/release
-resource "helm_release" "aws-load-balancer-controller" {
-  name       = "aws-load-balancer-controller"
-  repository = "https://aws.github.io/eks-charts"
-  chart      = "aws-load-balancer-controller"
-  // CHART VERSIONS
-  // 最新バージョン: https://artifacthub.io/packages/helm/aws/aws-load-balancer-controller
-  version    = "1.8.1"
-  namespace  = local.namespace
-  depends_on = [
-    kubernetes_service_account.aws_loadbalancer_controller
-  ]
+resource "aws_iam_role_policy_attachment" "albc" {
+  role = aws_iam_role.albc.name
+  policy_arn = aws_iam_policy.albc.arn
+}
 
-  set {
-    name  = "clusterName"
-    value = var.cluster_name
-  }
+resource "aws_eks_pod_identity_association" "albc" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_pod_identity_association
 
-  set {
-    name  = "serviceAccount.create"
-    value = false
-  }
-
-  set {
-    name  = "serviceAccount.name"
-    value = "aws-load-balancer-controller"
-  }
-
-  set {
-    name  = "image.repository"
-    value = "602401143452.dkr.ecr.ap-northeast-1.amazonaws.com/amazon/aws-load-balancer-controller"
-  }
-
-  set {
-    // APPLICATION VERSION
-    // 最新バージョン: https://artifacthub.io/packages/helm/aws/aws-load-balancer-controller
-    name  = "image.tag"
-    value = "v2.8.1"
-  }
-
-  // EKS Fargateを使用する場合は必要
-  // https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-helm.html#lbc-helm-install
-  set {
-    name  = "region"
-    value = local.region
-  }
-
-  // EKS Fargateを使用する場合は必要
-  // https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-helm.html#lbc-helm-install
-  set {
-    name  = "vpcId"
-    value = local.vpc_id
-  }
+  cluster_name    = var.cluster_name
+  namespace       = local.namespace
+  service_account = local.service_account
+  role_arn        = aws_iam_role.albc.arn
 }
 
 /**
  * ALB のセキュリティグループ
  */
-resource "aws_security_group" "ingress" {
-  name        = "${var.app_name}-${var.stage}-AlbIngres"
+resource "aws_security_group" "alb_ingress" {
+  name        = "${var.cluster_name}-AlbIngres"
   description = "Allow HTTP, HTTPS access."
-  vpc_id      = local.vpc_id
+  vpc_id      = var.vpc_id
 
   ingress {
     description = "Allow HTTP access."
@@ -142,6 +85,24 @@ resource "aws_security_group" "ingress" {
   }
 
   tags = {
-    Name = "${var.app_name}-${var.stage}-AlbIngres"
+    Name = "${var.cluster_name}-AlbIngres"
   }
+}
+
+/**
+ * ALBCをHelmでインストールするためのvalues.yaml
+ */
+resource "local_file" "albc_values" {
+  filename = "${var.project_dir}/plugin/albc/tmp/values.yaml"
+  content = templatefile(
+    "${path.module}/values.yaml",
+    {
+      cluster_name = var.cluster_name
+      service_account = local.service_account
+      security_group_id = aws_security_group.alb_ingress.id
+      role_arn = aws_iam_role.albc.arn
+      image_tag = local.app_version
+      vpc_id = var.vpc_id
+    }
+  )
 }

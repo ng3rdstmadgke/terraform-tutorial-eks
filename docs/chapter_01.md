@@ -45,7 +45,7 @@ awsならawsプロバイダ、GCPならgoogleプロバイダといった具合�
 
 - [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 
-```hcl
+```tf
 terraform {
   required_providers { // 必要なプロバイダを定義
     aws = { // awsプロバイダのインストール
@@ -74,7 +74,7 @@ provider "aws" { // awsプロバイダの設定
 - [aws_instance | aws provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance)
 
 
-```hcl
+```tf
 resource "aws_instance" "some" {
   ami           = "ami-a1b2c3d4"
   instance_type = "t2.micro"
@@ -94,7 +94,7 @@ Meta-Argumentsには、リソースの依存関係を明確にするための `d
 
 初回デプロイ後に変更・削除されないALBを作る例
 
-```hcl
+```tf
 resource "aws_lb" "app_alb" {
   name               = "app-alb"
   load_balancer_type = "application"
@@ -125,7 +125,7 @@ resource "aws_lb" "app_alb" {
 
 リストに定義されている名前で複数のバケットを作成する例
 
-```hcl
+```tf
 locals {
   buckets = ["assets", "media"]
 }
@@ -138,7 +138,7 @@ resource "aws_s3_bucket" "example" {
 
 指定されたポートへの入力を許可するセキュリティグループの例
 
-```hcl
+```tf
 locals {
   ingress_ports = [22, 80, 443]
 }
@@ -180,7 +180,7 @@ resource "aws_security_group" "example" {
 
 - [aws_ami | aws provider]()https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance
 
-```hcl
+```tf
 data "aws_ami" "this" {  // 既存のamiの参照を取得
   most_recent = true
   owners      = ["amazon"]
@@ -218,7 +218,7 @@ resource "aws_instance" "some" {  // amiの参照を指定してEC2インスタ�
 ※ `type` には [Types and Values | Terraform](https://developer.hashicorp.com/terraform/language/expressions/types) の型が指定できます。
 
 
-```hcl
+```tf
 
 variable "image_id" {
   type = string
@@ -239,7 +239,7 @@ resource "aws_instance" "some" {
 `output` ブロックはモジュールの出力値を定義します。(いわゆる関数における戻り値です。)  
 `output` ブロックで定義した出力値は、モジュールの外から参照できます。別のモジュールに値を引き渡したいときに利用します。
 
-```hcl
+```tf
 
 resource "aws_instance" "some" {
   ami           = "ami-xxxxx"
@@ -258,7 +258,7 @@ output instance_arn {
 ローカル変数には、モジュール内で何度も繰り返し利用する値などを定義します。(いわゆる関数におけるローカル変数です。)  
 
 
-```hcl
+```tf
 
 locals {
   instance_type = "t2.micro"
@@ -298,7 +298,7 @@ resource "aws_instance" "other" {
 
 `terraform/main.tf` から `alb` モジュールを利用するには、下記のように実装します。
 
-```hcl
+```tf
 module "some_alb" {
   source = "./alb"
   // albモジュールが variable を持つ場合は引数として与えます
@@ -316,7 +316,7 @@ retource "aws_xxxxxxxxxxx" "xxxxxxxxx" {
 
 ※ 公開されているモジュールは [Modules Registry | Terraform](https://registry.terraform.io/browse/modules) から検索します。
 
-```hcl
+```tf
 module "iam_account" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-account"
 
@@ -414,345 +414,205 @@ terraform force-unlock [options] <LOCK_ID>
 
 # ■ 環境構築
 
-## Terraformのインストール
+Terraform, aws-cli, kubectl, k9s, helmなどのパッケージはdevcontainerに含まれています。  
+インストール方法は [.devcontainer/Dockerfile](../.devcontainer/Dockerfile)を参照ください。
 
-https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli
+## AWSのクレデンシャル設定
 
-```bash
-sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+AWSのリソースを作成するにあたって、リソースを作成するための権限が必要です。  
+`arn:aws:iam::aws:policy/AdministratorAccess` ロールを持つユーザーのアクセスキーIDとシークレットアクセスキーをdefaultプロファイルに設定してください。
 
-# HashiCorp GPG キーをインストール
-wget -O- https://apt.releases.hashicorp.com/gpg | \
-gpg --dearmor | \
-sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
-
-# GPGキーのフィンガープリントを確認
-gpg --no-default-keyring \
---keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
---fingerprint
-
-# HashiCorp リポジトリをシステムに追加
-echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
-https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
-sudo tee /etc/apt/sources.list.d/hashicorp.list
-
-# HashiCorp リポジトリのパッケージ情報を更新
-sudo apt update
-
-# terraformをインストール
-sudo apt-get install terraform
-
-# 確認
-terraform version
-```
-
-completionの設定
-
-```bash
-terraform -install-autocomplete
-source ~/.bashrc
-```
-
-## awscliのインストール
-
-https://docs.aws.amazon.com/ja_jp/cli/latest/userguide/getting-started-install.html
-
-```bash
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
-```
-
-completion の設定
-
-```bash
-echo "complete -C '/usr/local/bin/aws_completer' aws" >> ~/.bashrc
-source ~/.bashrc
-```
-
-## kubectlのインストール
-
-```bash
-curl -LO https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl
-chmod +x ./kubectl
-sudo mv ./kubectl /usr/local/bin/kubectl
-```
-
-completionの設定
-
-```bash
-echo "source <(kubectl completion bash)" >> ~/.bashrc
-source ~/.bashrc
-```
-
-## k9sのインストール
-
-```bash
-sudo snap install k9s --devmode
-```
-
-
-# ■ ディレクトリ作成
-
-
-## プロジェクトディレクトリの作成
-
-今後、チュートリアルのソースはすべて `tutorial` ディレクトリ配下に配置します。  
-
-
-```bash
-mkdir tutorial
-cd tutorial
-```
-
-## ディレクトリ構成
-
-- `scripts/`
-  - `keycloak/` : keycloakをEKSに構築するためのマニフェストファイルなど
-- `terraform/`
-  - `envs/` : dev, stg, prd など、各環境のリソース作成のエントリーポイントとなるディレクトリを格納
-    - `dev/`
-      - `cluster/` : EKSクラスタを定義
-      - `charts/` : Helmでインストールするチャートを定義
-      - `keycloak/` : EKS上で動かすkeycloakの関連リソースを定義
-  - `modules/` : サービス毎・ライフサイクル毎にある程度リソースをグループ化したモジュールを配置
-    - `albc/` : AWS Load Balancer Controllerのインストールと関連リソース定義
-    - `hpa/` : metrics-serverをインストール
-    - `node-group/` : EKSのノードグループを定義
-    - `secret-store-csi-driver/` : secret-store-csi-driver のインストールと関連リソースの定義
-
-```bash
-# プロジェクトディレクトリ作成
-mkdir -p scripts/keycloak
-mkdir -p terraform/envs/dev/{cluster,charts,keycloak}
-mkdir -p terraform/modules/{albc,hpa,node-group,secret-store-csi-driver}
-
-# ファイルの作成
-touch scripts/keycloak/setup.sh
-touch terraform/envs/dev/{cluster,charts,keycloak}/{main.tf,outputs.tf,variables.tf}
-touch terraform/envs/dev/cluster/secrets.auto.tfvars
-touch terraform/modules/{albc,hpa,node-group,secret-store-csi-driver}/main.tf
-touch terraform/modules/{albc,node-group}/variables.tf
-touch terraform/modules/albc/outputs.tf
-```
-
-## .gitignore配置
-
-[Terraform.gitignore - gitignore | Github](https://github.com/github/gitignore/blob/main/Terraform.gitignore)
-
-`terraform/.gitignore`
+`~/.aws/config`
 
 ```ini
-# Local .terraform directories
-**/.terraform/*
-
-# .tfstate files
-*.tfstate
-*.tfstate.*
-
-# Crash log files
-crash.log
-crash.*.log
-
-# Exclude all .tfvars files, which are likely to contain sensitive data, such as
-# password, private keys, and other secrets. These should not be part of version 
-# control as they are data points which are potentially sensitive and subject 
-# to change depending on the environment.
-*.tfvars
-*.tfvars.json
-
-# Ignore override files as they are usually used to override resources locally and so
-# are not checked in
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-
-# Ignore transient lock info files created by terraform apply
-.terraform.tfstate.lock.info
-
-# Include override files you do wish to add to version control using negated pattern
-# !example_override.tf
-
-# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
-# example: *tfplan*
-
-# Ignore CLI configuration files
-.terraformrc
-terraform.rc
+[default]
+region=ap-northeast-1
+output=json
 ```
 
-# ■ 最初のterraformコード
+`~/.aws/credentials`
 
-最初のリソースとして [AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用してVPCを作成してみましょう。 
 
-<img width="900px" src="drawio/architecture_chapter01.drawio.png">
-
-## tfstate管理用s3バケット作成
-
-terraformのtfstateを管理するS3バケットを作成します。
-
-```bash
-# tfstateファイルをS3で管理する
-# https://developer.hashicorp.com/terraform/language/settings/backends/s3
-TFSTATE_BUCKET="terraform-tutorial-eks-tfstate"
-
-aws s3api create-bucket \
-  --bucket $TFSTATE_BUCKET \
-  --region ap-northeast-1 \
-  --create-bucket-configuration LocationConstraint=ap-northeast-1
-
+```ini
+[default]
+aws_access_key_id = xxxxxxxxxxxxxxxxxxxx
+aws_secret_access_key = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-## tfstateロック用のdynamodbテーブルを作成
+# ■ 最初のTerraformコード
 
-terraformを複数個所から同時にデプロイできないように、dynamoDBにtfstateをロックするためのテーブルを作成します。
+これまでの内容のおさらいとして簡単なTerraformコードを実装して、リソースを作成してみましょう。
+
+## テスト用のプロジェクト作成
+
+テスト用のTerraformを実装するためのプロジェクトを作成します。
 
 ```bash
-# tfstateファイルのロック情報をDynamoDBで管理する
-# https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
+# ディレクトリ作成
+mkdir -p tmp/sample_resource
+cd tmp/sample_resource
 
-TFSTATE_LOCK_TABLE="terraform-tutorial-eks-tfstate-lock"
-
-aws dynamodb create-table \
-    --table-name $TFSTATE_LOCK_TABLE \
-    --attribute-definitions AttributeName=LockID,AttributeType=S \
-    --key-schema AttributeName=LockID,KeyType=HASH \
-    --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
-    --region ap-northeast-1
+# Terraformのファイル作成
+touch main.tf
 ```
 
 ## tfstateとプロバイダの設定
 
-※ `EDIT: ...` コメントの項目を各自編集してください
-
 - `terraform`
   - `required_version`  
   インストールしてあるTerraformのバージョンを指定します。 ( `terraform --version` )
-  - `backend`  
-  terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。
   - `required_providers`  
   利用するプロバイダを指定します。今回は [AWSプロバイダ](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用します。
 - `provider`  
 awsプロバイダの設定を記述します。
 
-`terraform/envs/dev/cluster/main.tf`
 
-```hcl
+`tmp/sample_resource/main.tf`
+
+
+```tf
 terraform {
-  required_version = "~> 1.9.4"
-
-  // tfstateファイルをs3で管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3
-  backend "s3" {
-    // tfstate保存先のs3バケットとキー
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "xxxxxxxx/dev/cluster/terraform.tfstate"  // EDIT: xxxxxx に重複しない任意の値を指定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    // tfstateファイルのロック情報をDynamoDBで管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
-  }
+  required_version = "~> 1.10"
 
   required_providers {
-    aws = {  // AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+    aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.61.0"
+      version = "~> 5.82"
     }
   }
 }
 
-provider "aws" {  // Configure Reference: https://registry.terraform.io/providers/hashicorp/aws/latest/docs#aws-configuration-reference
+provider "aws" {
   region = "ap-northeast-1"
   default_tags {  // すべてのリソースに付与するタグ
     tags = {
-      PROJECT = "TERRAFORM_TUTORIAL_EKS",
+      PROJECT = "TERRAFORM_TUTORIAL_EKS_TEST",
     }
   }
 }
 ```
 
-## ローカル変数の定義
 
-`terraform/envs/dev/cluster/variables.tf`
+## リソースの定義
 
-```hcl
-locals {
-  app_name = "xxxxxx  // EDIT: 重複しない任意の文字を指定してください"
-  stage    = "dev"
-  cluster_name = "${local.app_name}-${local.stage}"
-  vpc_cidr = "10.61.0.0/16"  // EDIT: 重複しないCIDRを指定してください
-  private_subnets = [  // EDIT: VPCのCDIRに応じて3つ指定してください
-    "10.61.1.0/24",
-    "10.61.2.0/24",
-    "10.61.3.0/24",
-  ]
-  public_subnets = [  // EDIT: VPCのCDIRに応じて3つ指定してください
-    "10.61.101.0/24",
-    "10.61.102.0/24",
-    "10.61.103.0/24",
-  ]
-}
-```
-
-## VPCリソースの定義
-
-VPCの構築には [terraform-aws-modules/vpc/aws](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest) モジュールを利用します。  
+s3バケットを作成するサンプルを作成します。  
+このTerraformでは、`{ユーザー入力}-{ランダム文字列}` をバケット名とするバケットを作成し、作成したバケットのARNを出力として返します。
 
 
-`terraform/envs/dev/cluster/main.tf`
+`tmp/sample_resource/main.tf`
 
-```hcl
-/**
- * VPC作成
- *
- * terraform-aws-modules/vpc/aws | Terraform
- * https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest
- */
-module "vpc" {
-  source = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.8.1"
 
-  name = "${local.app_name}-${local.stage}-vpc"
-  cidr = local.vpc_cidr
+```tf
+// バケット名のプレフィックスを入力として受け取る
+variable bucket_prefix {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket
 
-  azs             = ["ap-northeast-1a", "ap-northeast-1c", "ap-northeast-1d"]
-  private_subnets = local.private_subnets
-  public_subnets  = local.public_subnets
-
-  enable_nat_gateway = true   // NATゲートウェイを作成する
-  single_nat_gateway = true   // 1つのNATゲートウェイを複数のプライベートサブネットで共有する
-  enable_vpn_gateway = false  // VPNゲートウェイを利用しない
-
-  // パブリックサブネットを外部LB用に利用することをKubernetesとALBが認識できるようにするためのタグ
-  public_subnet_tags = {
-    "kubernetes.io/role/elb" = "1"
+  type = string
+  description = "s3 bucket name prefix"
+  validation {
+    condition = length(var.bucket_prefix) > 2 && length(var.bucket_prefix) < 56 && can(regex("^[a-z\\d][a-z\\d.-]+[a-z\\d]$", var.bucket_prefix))
+    error_message = "invalid bucket name."
   }
-  // プライベートネットを内部LB用に利用することをKubernetesとALBが認識できるようにするためのタグ
-  private_subnet_tags = {
-    "kubernetes.io/role/internal-elb" = "1"
+}
+
+// バケットARNを出力として返す
+output bucket_arn {
+  value = aws_s3_bucket.example.arn
+}
+
+// ランダム文字列の生成
+resource "random_string" "bucket_suffix" {
+  // https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/string
+
+  length  = 8
+  lower   = true  # 小文字を文字列に含める
+  numeric = true  # 数値を文字列に含める
+  upper   = false # 大文字を文字列に含めない
+  special = false # 記号を文字列に含めない
+}
+
+
+// バケットの定義
+resource "aws_s3_bucket" "example" {
+  bucket = "${var.bucket_prefix}-${random_string.bucket_suffix.result}"
+  force_destroy = true
+
+  tags = {
+    Name        = "My bucket"
+    Environment = "Dev"
   }
 }
 ```
 
+## デプロイ
 
-# ■ terraformデプロイ
-
-terraformを実行してVPCを作成してみましょう
+作成したリソースをデプロイしてみましょう
 
 ```bash
-# 初期化
-terraform -chdir=terraform/envs/dev/cluster init
+# プロジェクトの初期化 (プロバイダのインストールなどを行います)
+$ terraform init
 
-# デプロイ内容確認
-terraform -chdir=terraform/envs/dev/cluster plan
+# 作成されるリソースの確認
+$ terraform plan
 
-# デプロイ
-terraform -chdir=terraform/envs/dev/cluster apply -auto-approve
+var.bucket_prefix
+  s3 bucket name prefix
+
+  Enter a value: <バケット名のプレフィックス>
+
+# リソースの作成
+$ terraform apply
+
+var.bucket_prefix
+  s3 bucket name prefix
+
+  Enter a value: <バケット名のプレフィックス>
+
+...
+
+Do you want to perform these actions?
+  Terraform will perform the actions described above.
+  Only 'yes' will be accepted to approve.
+
+  Enter a value: <yesを入力>
 ```
 
+デプロイを行うと、terraformによって管理されているリソースの状態を保存する `terraform.tfstate` というファイルが生成されます。  
+`terraform apply` 実行時は、`terraform.tfstate` とソースコードの差分が発生している箇所のみをデプロイします。  
 
-## 確認
+`terraform.tfstate` で管理されているリソースを少し確認してみましょう
 
-- dynamodbにロック用のレコードが登録されているか確認してみましょう。
-- tfstateが指定したs3バケットの指定されたキーに作成されているかを確認してみましょう。
-- VPCが設定どおりに構築されているか確認してみましょう。
+```bash
+# tfstateで管理されているリソースを一覧表示します。
+$ terraform state list
+aws_s3_bucket.example
+random_string.bucket_suffix
+
+# tfstateで管理されているリソースの詳細を表示します。
+$ terraform state show aws_s3_bucket.example
+```
+
+実際にs3バケットが作成されていることを確認します
+
+```bash
+aws s3 ls | grep "バケット名のプレフィックス"
+```
+
+## 削除
+
+```bash
+$ terraform destroy
+
+var.bucket_prefix
+  s3 bucket name prefix
+
+  Enter a value: <バケット名のプレフィックス>
+
+...
+
+Do you really want to destroy all resources?
+  Terraform will destroy all your managed infrastructure, as shown above.
+  There is no undo. Only 'yes' will be accepted to confirm.
+
+  Enter a value: <yesを入力>
+```

@@ -1,482 +1,401 @@
-Chapter2 EKSクラスタ作成
+Chapter1 設計・環境構築
 ---
 [READMEに戻る](../README.md)
 
-# ■ 作るもの
-
-この章ではEKSクラスタを作成します。
-
-<img width="900px" src="drawio/architecture_chapter02.drawio.png">
 
 
-# ■ EKSクラスタの作成
+# ■ 設計
 
-EKSクラスタは [terraform-aws-modules/eks/aws](https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest) という外部モジュールを利用して作成します。
+Terraformを実装し始める前に設計について少し考えてみましょう。  
+
+Terraformは最初にデプロイして終わりではありません。サービスが続く限り日々更新・デプロイされます。更新はサービス自体の構成変更の場合もありますし、Terraformやプロバイダのアップデートの場合もあります。  
+このように長期間運用されるシステムでは、時間経過とともに発生する様々な変更に耐えられる設計を考える必要があり、この設計の如何によっては、運用の崩壊や障害の増加といったリスクが高まることになります。
 
 
-`terraform/envs/dev/cluster/main.tf`
+## モノリシックなTerraformの問題点
 
-```hcl
-/**
- * EKSクラスタ作成
- *
- * terraform-aws-modules/eks/aws | Terraform
- * https://registry.terraform.io/modules/terraform-aws-modules/eks/aws/latest
- */
-module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.22.0"
+Terraformでは1度の `terraform apply` でシステムすべてを構築することも可能ですが、実際の運用ではその手法は避けるべきです。
 
-  cluster_name = local.cluster_name
-  cluster_version = "1.30"
+その理由として、TerraformはTerraform自体のアップデートやプロバイダが頻繁にアップデートされるため、そのアップデート内容によっては既存のリソースに意図せぬリリースが行われる可能性があります。また、構成変更の際にリソース同士の依存関係によって意図せぬリリースが発生することもあります。  
+意図せぬリリースが発生すると、最悪既存のリソースが再作成されてサービスが止まったり、データが消失したりします。
 
-  // コントロールプレーンにインターネット経由でアクセスする
-  cluster_endpoint_public_access = true
+モノリシックな設計では、常に意図せぬリリースを考慮しながら実装しなければならず、これが起こった際の影響調査や解決は非常に難しくミスもしやすいため、長期的に見ると生産性が低下します。
 
-  vpc_id = module.vpc.vpc_id
+この、意図せぬリリースをなるべく回避するにはリソースをある程度のまとまり(コンポーネント)に分割し、コンポーネント単位でデプロイする必要があります。  
+コンポーネント単位でデプロイすることで、リリースの影響をコンポーネント内に限定することができます。  
 
-  // ノード/ノードグループがプロビジョニングされるサブネットID
-  // control_plane_subnet_idsが省略された場合、コントロールプレーンのENIもこのサブネットにプロビジョニングされる
-  subnet_ids = module.vpc.private_subnets
+### 例えば...
 
-  // IAM Roles for Service Accounts (IRSA) を利用するためのEKS用のOIDCプロバイダを作成する
-  enable_irsa = true
+VPC, Subnet, EC2をデプロイするTerraformを考えると、モノリシックだとEC2の追加や変更を行う際に常にネットワークに変更が入らないかを考慮する必要がありますが、コンポーネントに分割するとそのような関心を払う必要がなくなります。
+![](../docs/drawio/chapter_02/component_01.drawio.png)
 
-  // TerraformをデプロイしたRoleにkubernetesAPIへのアクセス権を付与する (これがないとkubectlコマンドで操作できない)
-  enable_cluster_creator_admin_permissions = true
 
-  // IAMユーザー・ロールにKubernetesAPIへのアクセス権限を付与する方式 API or API_AND_CONFIG_MAP
-  // https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/grant-k8s-access.html#set-cam
-  authentication_mode = "API_AND_CONFIG_MAP"
-}
+
+では、コンポーネントはどのように分割すればいいでしょうか。
+
+
+## コンポーネントとは
+
+まず、コンポーネントとは **「システムの一部として独立してデプロイ・再利用できる最小限のまとまり」** のことです。  
+そして、コンポーネントには一貫したテーマや目的があり、コンポーネントの構成要素はコンポーネントの目的と関連性の高いものでなければなりません。
+
+
+## コンポーネントの凝集性 (コンポーネントに含める要素について)
+
+
+> [!NOTE] コンポーネントの凝集性とは
+> コンポーネントが担う責務や機能がどの程度のまとまりを持っているかを示す概念で、具体的には **「コンポーネントの責務が一つに絞り込まれているか」** **「構成要素がコンポーネントの責務と強い関連性を持っているか」** を図る指標となります。  
+> 「高い」または「低い」で表します。
+> 
+>
+> - **凝集性が高い**  
+>   - 単一の責務に特化している
+>   - メンテナンス性・再利用性が高い
+>   - コンポーネントの責務を達成するための関連性の強い要素のみで構成されている
+> - **凝集性が低い**  
+>   - 複数の異なる責務を持っている
+>   - 一つの変更に対する修正範囲が大きい
+>   - コンポーネントの責務と関連性の薄い構成要素が雑多に詰め込まれている
+
+コンポーネントの凝集性を評価するには3つの原則が材料となります。
+
+1. **再利用・リリース等価の原則(REP)** (再利用性のためのグループ化)  
+再利用可能な単位でひとまとめにすること
+2. **閉鎖性共通の原則(CCP)** (保守性のためのグループ化)  
+同じ理由、同じタイミングで変更されるものはひとまとめにすること
+3. **全再利用の原則(CRP)** (不要なリリース作業を減らすための分割)  
+不要なものに依存しないこと
+
+### 再利用・リリース等価の原則(REP)
+
+> *再利用の単位とリリースの単位は等価になる*
+
+コンポーネントを再利用の単位で作成し、再利用の単位でリリースできるようにすることで、コンポーネントの再利用がしやすくなります。  
+
+> [!CAUTION] この原則を無視すると...
+> 再利用の際に複数のコンポーネントを参照しなければならなくなり、バージョンの互換性の考慮が発生するなど、再利用が難しくなります
+
+### 閉鎖性共通の原則(CCP)
+
+> *同じ理由、同じタイミングで変更されるクラスをコンポーネントにまとめること。変更の理由やタイミングが異なるクラスは別のコンポーネントに分けること。*
+
+コンポーネントが、変更理由や変更タイミングが同じ要素で構成されていれば、一つの変更に対して一つのコンポーネントの変更とデプロイ行うだけで良くなります。  
+つまり、変更に対して閉じている(=閉鎖性)ということです。
+
+> [!CAUTION] この原則を無視すると...
+> 同じ理由、同じタイミングで変更されるべきリソースが複数のコンポーネントに散らばっていると、一つの変更で複数のコンポーネントの修正が必要になります。(修正範囲の拡大)  
+> 異なる理由、異なるタイミングで変更されるべきリソースが同一コンポーネントにまとまっていると、一つの変更が関係ない機能に影響を及ぼす可能性があります。(影響範囲の拡大)  
+> どちらもメンテナンス性が低下します。
+
+
+### 全再利用の原則(CRP)
+
+> *コンポーネントのユーザーに対して、実際には使わないものへの依存を強要してはいけない*
+
+コンポーネントが本当に必要な依存先にのみ依存することで、不要な依存先の変更に起因するリソースを避けることができます。
+
+
+> [!CAUTION] この原則を無視すると...
+> コンポーネントが不要な依存先に依存することで、不要な依存先の変更の影響ででリリースを強制されるようになります。
+
+### コンポーネントの凝集性のテンション図
+
+これら3つの原則はすべてを遵守すべきものではありません。  
+**再利用・リリース等価の原則(REP)** と **閉鎖性共通の原則(CCP)** はコンポーネントを大きくする方向に働き、 **全再利用の原則(CRP)** はコンポーネントを小さくする方向に働くといった点で3つの原則にはトレードオフな部分があり、どの原則を重視するかはプロダクトの状況によってバランスを取りながら変えていく必要があります。  
+これら3つの原則のバランスを上手く取るのがアーキテクトの腕の見せ所です。
+
+
+
+テンション図は3つの原則がそれぞれどのように影響を及ぼし合うかを示したもので、辺にある記述は反対側の頂点にある原則を無視したときにかかる **コスト** を表しています。
+
+- **再利用・リリース等価の原則 (REP)** と **全再利用の原則 (CRP)** にだけ力を入れていると
+  - 些細な修正で多くのコンポーネントの修正が必要になったり、一つの修正が関係のない他の機能に影響を及ぼします。
+- **再利用・リリース等価の原則 (REP) ** と ** 閉鎖性共通の原則 (CCP)** にだけ力を入れていると
+  - コンポーネントの依存先が増え、不要な依存先の変更に起因した不要なリリースが増加します。
+- **全再利用の原則 (CRP)** と **閉鎖性共通の原則 (CCP)** にだけ力を入れていると
+  - 再利用の単位が複数のコンポーネントにまたがり再利用しづらくなります。
+
+
+![](../docs/drawio/chapter_02/component_02.drawio.png)
+
+### Terraformにおけるコンポーネントの設計
+
+立ち戻って、Terraformにおけるコンポーネントの凝集性を考えてみましょう。  
+結論から言うと、Terraformでは**閉鎖性共通の原則 (CCP)** を最も重視し、次点で **全再利用の原則 (CRP)** を考慮します。  
+理由としては、Terraformのプロジェクトにおいて「変更の際に影響範囲が限定されること」と「依存先の更新に起因する不要なリリースが発生しないこと」が最も重要だからです。  
+
+反対に、「共通化による再利用性の向上」は重要ではありません。そもそもインフラは1点ものの場合が多いので再利用されることが殆どありませんし、共通化するということは共通部分を変更した際にそれを利用するすべてのコンポーネントでリリースが必要になるため、運用負荷も大きくなります。  
+
+図で表すと、赤丸のポジションを目指すことになります。
+
+![](../docs/drawio/chapter_02/component_03.drawio.png)
+
+
+## コンポーネントの結合 (コンポーネント同士の関係性)
+
+コンポーネント同士の関係性についても3つの原則があります。
+
+1. **非循環依存関係の原則(ADP)**
+2. **安定依存の原則(SDP)**
+3. **安定度・抽象度等価の原則(SAP)**
+
+### 非循環依存関係の原則(ADP)
+> *コンポーネントの依存グラフに循環依存があってはいけない*
+
+### 安定依存の原則(SDP)
+> *安定度の高い方向に依存すること*
+
+> [!NOTE] 安定度とは
+> 安定度(`I`)は `I = 依存している数 / (依存されている数 + 依存している数)` で計算します。  
+> 値が小さいほど **安定** 、 値が大きいほど **不安定** となります。  
+> - `I = 0` 最も安定
+> - `I = 1` 最も不安定
+>
+> つまり、たくさん依存されているコンポーネントが **安定** で、逆に、他への依存が多いコンポーネントが **不安定** となります。
+
+安定依存の原則(SDP)は、コンポーネントの `I` を依存するコンポーネントの `I` よりも大きくすべきであるという原則となります。  
+つまり、コンポーネントの依存グラフを上からたどると `I` の値は **減少** していくべきだということになります。
+
+![](../docs/drawio/chapter_02/component_04.drawio.png)
+
+誤解を恐れずにざっくりいうと、たくさんの依存されているコンポーネントは、なるべく他のコンポーネントに依存しないようにしましょうということです。
+
+### 安定度・抽象度等価の原則(SAP)
+> *コンポーネントの抽象度は、その安定度と同程度でなければいけない*
+
+これは、安定したコンポーネントは抽象度も高くあるべき、不安定なコンポーネントは具象的であるべきという原則ですが、Terraformは抽象化ができないので説明を省きます。
+
+
+## コンポーネント設計
+
+今回のチュートリアルにおけるコンポーネントを設計していきます。
+
+### コンポーネント作成
+
+**全再利用の原則 (CRP)** と **閉鎖性共通の原則 (CCP)** に基づいて、コンポーネントはリソースの生存期間で分割します。  
+※ 生存期間で分割するということは、同じタイミング作成・削除されるリソースにグルーピングするということになります。
+
+
+| コンポーネント | 要素 |
+| --- | --- |
+| base | いろいろなコンポーネントで利用される共通変数など |
+| network | VPC, サブネットなど |
+| cluster | EKSクラスタ |
+| node-group | EKSのノードグループ, 起動テンプレートなど |
+| addon | EKSのアドオン |
+| plugin | helmでインストールするチャートに付随するリソース |
+| service | EKSにデプロイするサービスに付随するリソース |
+
+
+### コンポーネントの結合
+
+
+**非循環依存関係の原則(ADP)** と **安定依存の原則(SDP)** に基づいてコンポーネント同士を結合します。  
+※ 循環依存しない、安定度の高いコンポーネントに依存するようにします。
+
+![](../docs/drawio/stack.drawio.png)
+
+# ■ 環境構築
+
+## ツール類のインストール
+
+Terraform, aws-cli, kubectl, k9s, helmなどのパッケージはdevcontainerに含まれています。  
+インストール方法は [.devcontainer/Dockerfile](../.devcontainer/Dockerfile)を参照してください。
+
+## ディレクトリ構成
+
+チュートリアルのソースはすべて `tutorial` ディレクトリ配下に配置します。  
+
+```bash
+cd $PROJECT_DIR/tutorial
 ```
 
-# ■ IAMユーザー・ロールにKubernetesAPIへのアクセス権限を付与
+ディレクトリ構成
 
-kubectlを実行するロールやAWSのコンソールからEKSのリソースを確認するユーザーにKubernetesAPIへのアクセス権限を付与します。  
-※ aws-auth ConfigMapで設定することもできますが、 `authentication_mode=API_AND_CONFIG_MAP` を設定しているので、今回はアクセスエントリから設定します。
+```
+tutorial/
+  plugin/
+    albc/                       # helmでALBCをインストールするための手順やリソースなど
+    metrics-server/             # helmでmetrics-serverをインストールするための手順やリソースなど
+    secret-store-csi-driver/    # helmでsecret-store-csi-driverをインストールするための手順やリソースなど
+  service/
+    keycloak/                   # keycloakをEKSにデプロイするためのマニフェストファイルなど
+  terraform/
+    envs/                       # dev, stg, prd など、各環境のリソース作成のエントリーポイントとなるディレクトリを格納
+      dev/
+        base/                   # いろいろなコンポーネントで利用される共通変数など
+        network/                # VPC, サブネットなど
+        cluster/                # EKSクラスタ
+        node-group/             # EKSのノードグループ, 起動テンプレートなど
+        addon/                  # EKSのアドオン関連
+        plugin/                 # helmでインストールするチャートに付随するリソース
+        service/                # EKSにデプロイするサービスに付随するリソース
+    modules/                    # サービス毎・ライフサイクル毎にある程度リソースをグループ化したモジュールを配置
+      albc/                     # AWS Load Balancer Controllerのインストールと関連リソース定義
+      cluster/                  # EKSクラスタ
+      ebs-csi-driver/           # ebs-csi-driverに付随するリソース
+      keycloak/                 # keycloakサービスに付随するリソース
+      node-group-bottlerocket/  # bottlerocketのノードグループを作成するモジュール
+```
 
-- [IAM アイデンティティと Kubernetes のアクセス許可を関連付ける](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/grant-k8s-access.html#authentication-modes)
+## .gitignore配置
 
+[Terraform.gitignore - gitignore | Github](https://github.com/github/gitignore/blob/main/Terraform.gitignore)
 
-IAMロール, IAMユーザーを受け取るための変数を定義します。
+`terraform/.gitignore`
 
-`tutorial/terraform/envs/dev/cluster/variables.tf`
+```ini
+# Local .terraform directories
+**/.terraform/*
 
-```hcl
-// EKSのアクセスエントリに追加するIAMユーザまたはIAMロールのARN
-variable access_entries {
-  type = list(string)
-}
+# .tfstate files
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files, which are likely to contain sensitive data, such as
+# password, private keys, and other secrets. These should not be part of version 
+# control as they are data points which are potentially sensitive and subject 
+# to change depending on the environment.
+*.tfvars
+*.tfvars.json
+
+# Ignore override files as they are usually used to override resources locally and so
+# are not checked in
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore transient lock info files created by terraform apply
+.terraform.tfstate.lock.info
+
+# Include override files you do wish to add to version control using negated pattern
+# !example_override.tf
+
+# Include tfplan files to ignore the plan output of command: terraform plan -out=tfplan
+# example: *tfplan*
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+```
+
+# ■ baseコンポーネント作成
+
+いろいろなコンポーネントで利用される変数を定義するbaseコンポーネントを作成します。
+
+## tfstate管理用s3バケット作成
+
+terraformのtfstateを管理するS3バケットを作成します。
+
+```bash
+# tfstateファイルをS3で管理する
+# https://developer.hashicorp.com/terraform/language/settings/backends/s3
+TFSTATE_BUCKET="terraform-tutorial-eks-tfstate"
+
+aws s3api create-bucket \
+  --bucket $TFSTATE_BUCKET \
+  --region ap-northeast-1 \
+  --create-bucket-configuration LocationConstraint=ap-northeast-1
 
 ```
 
-このままだと、デプロイ時に毎回変数を手打ちしなければならないので、変数に入力する値をファイルで定義します。  
-※ このファイルは機密情報が入るので.gitignoreでgitの管理からはずした方がいいです。
+## tfstateロック用のdynamodbテーブルを作成
 
-`tutorial/terraform/envs/dev/cluster/secrets.auto.tfvars`
+terraformを複数個所から同時にデプロイできないように、dynamoDBにtfstateをロックするためのテーブルを作成します。
 
-```hcl
-access_entries = [
-  "arn:aws:iam::111111111111:user/xxxxxxxxxxxxxxxx",
-  "arn:aws:iam::111111111111:role/xxxxxxxxxxxxxxxxxxxxxxxxxxx",
-]
+```bash
+# tfstateファイルのロック情報をDynamoDBで管理する
+# https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
+
+TFSTATE_LOCK_TABLE="terraform-tutorial-eks-tfstate-lock"
+
+aws dynamodb create-table \
+    --table-name $TFSTATE_LOCK_TABLE \
+    --attribute-definitions AttributeName=LockID,AttributeType=S \
+    --key-schema AttributeName=LockID,KeyType=HASH \
+    --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
+    --region ap-northeast-1
 ```
 
+## tfstateとプロバイダの設定
 
-`access_entries` 変数に指定されたIAMユーザー,IAMロールをEKSのアクセスエントリに追加します。
+※ `EDIT: ...` コメントの項目を各自編集してください
 
-※ `access_entries` は配列なので `for_each` を利用してループしています
+- `terraform`
+  - `required_version`  
+  インストールしてあるTerraformのバージョンを指定します。 ( `terraform --version` )
+  - `backend`  
+  terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。
+  - `required_providers`  
+  利用するプロバイダを指定します。今回は [AWSプロバイダ](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用します。
+- `provider`  
+awsプロバイダの設定を記述します。
 
-`terraform/envs/dev/cluster/main.tf`
+`terraform/envs/dev/base/main.tf`
 
-```hcl
-/**
- * IAMユーザー・ロールにkubernetesAPIへのアクセス権限を付与
- * - EKS アクセスエントリを使用して Kubernetes へのアクセスを IAM ユーザーに許可する | AWS
- *   https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-entries.html
- */
-// aws_eks_access_entry | Terraform
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry
-resource "aws_eks_access_entry" "admin" {
-  for_each = toset(var.access_entries)  // 配列はループできないのでセットに変換
-  cluster_name      = local.cluster_name
-  principal_arn     = each.key
-  type              = "STANDARD"
+```tf
+terraform {
+  required_version = "~> 1.10"
 
-  depends_on = [
-    module.eks
-  ]
-}
-
-// aws_eks_access_policy_association | Terraform
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_policy_association
-resource "aws_eks_access_policy_association" "admin" {
-  for_each = toset(var.access_entries)
-  cluster_name  = local.cluster_name
-  // アクセスポリシー: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-policies.html#access-policy-permissions
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn = each.key
-
-  access_scope {
-    type       = "cluster"
+  // tfstateファイルをs3で管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3
+  backend "s3" {
+    // tfstate保存先のs3バケットとキー
+    bucket = "terraform-tutorial-eks-tfstate"
+    key    = "XXXXX/dev/base/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
+    region = "ap-northeast-1"
+    encrypt = true
+    // tfstateファイルのロック情報をDynamoDBで管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
+    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
-  depends_on = [
-    module.eks
-  ]
-}
-
-```
-
-
-# ■ アドオンのインストール
-
-EKSにインストールするアドオンを定義していきます
-
-`terraform/envs/dev/cluster/main.tf`
-
-```hcl
-/**
- * アドオン
- *
- * aws_eks_addon | Terraform
- * https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon
- */
-resource "aws_eks_addon" "coredns" {
-  cluster_name  = local.cluster_name
-  addon_name    = "coredns"
-  addon_version = "v1.11.1-eksbuild.8"
-
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-resource "aws_eks_addon" "kube_proxy" {
-  cluster_name = local.cluster_name
-  addon_name   = "kube-proxy"
-  addon_version = "v1.30.0-eksbuild.3"
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-resource "aws_eks_addon" "vpc_cni" {
-  cluster_name = local.cluster_name
-  addon_name   = "vpc-cni"
-  addon_version = "v1.18.3-eksbuild.1"
-  depends_on = [
-    module.node_group_1
-  ]
-}
-
-resource "aws_eks_addon" "eks_pod_identity_agent" {
-  cluster_name = local.cluster_name
-  addon_name   = "eks-pod-identity-agent"
-  addon_version = "v1.3.0-eksbuild.1"
-  depends_on = [
-    module.node_group_1
-  ]
+  required_providers {
+    // AWS Provider: https://registry.terraform.io/providers/hashicorp/aws/latest/docs
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.82.2"
+    }
+  }
 }
 ```
 
-# ■ ノードグループの作成
+## 変数と出力値の定義
 
-ノードグループは異なる設定で複数作成したい場合があるので、モジュール化してみましょう。
+※ `EDIT: ...` コメントの項目を各自編集してください
 
-## モジュールの定義
+`terraform/envs/dev/base/main.tf`
 
-
-### 変数定義
-
-まずは、ノードグループモジュールが受け取る変数を定義します。  
-今回はノードグループ名、インスタンスタイプ、インスタンス数を指定できるようにします。
-
-
-`terraform/modules/node-group/variables.tf`
-
-```hcl
-variable app_name {}
-variable stage {}
-variable node_group_name {}
-variable instance_types {
-  type = list(string)
-  default = ["m6a.large"]
-}
-variable desired_size {
-  type = number
-  default = 1
-}
-
-// Data Source: aws_eks_cluster
-// https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster
-data "aws_eks_cluster" "this" {
-  name = local.cluster_name
-}
-
+```tf
 locals {
-  cluster_name = "${var.app_name}-${var.stage}"
+  cluster_name = "tte-XXXXX-dev"  // EDIT: XXXXX に重複しない任意の値を指定してください
 }
 
-```
-
-### リソース定義
-
-ノードグループで起動するインスタンスのインスタンスロールを定義します。
-
-`terraform/modules/node-group/main.tf`
-
-```hcl
-/**
- * ノードのIAMロールの作成
- *   - managed_node_group で使用する IAM ロールを作成します。
- *     - https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-node-role.html#create-worker-node-role
- *   - terraform-aws-eks の サブモジュール eks-managed-node-group のソースコード
- *     - https://github.com/terraform-aws-modules/terraform-aws-eks/blob/v20.14.0/modules/eks-managed-node-group/main.tf#L470
- */
-resource "aws_iam_role" "eks_node_role" {
-  name = "${var.app_name}-${var.stage}-${var.node_group_name}-EKSNodeRole"
-  assume_role_policy = jsonencode({
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Effect": "Allow",
-        "Principal": {
-          "Service": "ec2.amazonaws.com"
-        },
-        "Action": "sts:AssumeRole"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "eks_worker_node_policy" {
-  role = aws_iam_role.eks_node_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
-}
-
-resource "aws_iam_role_policy_attachment" "ec2_container_registry_read_only" {
-  role = aws_iam_role.eks_node_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-}
-
-resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
-  role = aws_iam_role.eks_node_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
-}
-
-resource "aws_iam_policy" "amazoneks_cni_ipv6_policy" {
-  name = "${var.app_name}-${var.stage}-${var.node_group_name}-AmazonEKS_CNI_IPv6_Policy"
-  policy = jsonencode({
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Effect": "Allow",
-        "Action": [
-          "ec2:AssignIpv6Addresses",
-          "ec2:DescribeInstances",
-          "ec2:DescribeTags",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DescribeInstanceTypes"
-        ],
-        "Resource": "*"
-      },
-      {
-        "Effect": "Allow",
-        "Action": [
-          "ec2:CreateTags"
-        ],
-        "Resource": [
-          "arn:aws:ec2:*:*:network-interface/*"
-        ]
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "amazoneks_cni_ipv6_policy" {
-  role = aws_iam_role.eks_node_role.name
- 
-  policy_arn = aws_iam_policy.amazoneks_cni_ipv6_policy.arn
-}
-```
-
-ノードグループのインスタンスが利用する起動テンプレートを定義します。
-
-`terraform/modules/node-group/main.tf`
-
-```hcl
-/**
- * 起動テンプレート
- * https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template
- */
-resource "aws_launch_template" "node_instance" {
-  name = "${var.app_name}-${var.stage}-${var.node_group_name}-EKSNodeLaunchTemplate"
-
-  // イメージ ID を明示的に指定する場合
-  // image_id = nonsensitive(aws_ssm_parameter.eks_ami_release_version.value)
-
-  vpc_security_group_ids = [
-    data.aws_eks_cluster.this.vpc_config[0].cluster_security_group_id,
-  ]
-
-  block_device_mappings {
-    device_name = "/dev/xvda"
-    ebs {
-      volume_size = 50
-      volume_type = "gp3"
-    }
-  }
-
-  monitoring {
-    enabled = true
-  }
-
-  tag_specifications {
-    resource_type = "instance"
-
-    tags = {
-      Name = "${var.app_name}-${var.stage}-${var.node_group_name}"
-    }
-  }
-}
-```
-
-ノードグループを定義します。  
-
-
-`terraform/modules/node-group/main.tf`
-
-```hcl
-/**
- * EKSノードグループ
- * https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_node_group
- */
-resource "aws_eks_node_group" "this" {
-  cluster_name    = local.cluster_name
-  version         = data.aws_eks_cluster.this.version
-
-  node_group_name = var.node_group_name
-  node_role_arn   = aws_iam_role.eks_node_role.arn
-  subnet_ids      = data.aws_eks_cluster.this.vpc_config[0].subnet_ids
-  capacity_type = "SPOT"
-  // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
-  instance_types = var.instance_types
-
-  scaling_config {
-    desired_size = var.desired_size
-    max_size     = 10
-    min_size     = 1
-  }
-
-  // 起動テンプレートを指定する場合、disk_size , remote_access
-  launch_template {
-    id = aws_launch_template.node_instance.id
-    version = aws_launch_template.node_instance.latest_version
-  }
-
-  update_config {
-    // ノード更新時に利用不可能になるノードの最大数
-    max_unavailable = 1
-  }
-
-
-  // ロールは作成済みだけど、ポリシーがアタッチされていない状況が発生するので、depends_on でポリシーのアタッチを待つ
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_worker_node_policy,
-    aws_iam_role_policy_attachment.ec2_container_registry_read_only,
-    aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.amazoneks_cni_ipv6_policy,
-  ]
-}
-```
-
-
-## モジュールの利用
-
-先ほど定義したノードグループモジュールを利用してみましょう。  
-モジュールを利用する場合はサードパティ製のモジュールを利用するときと同様 `module` 構文を利用します。  
-自作のモジュールの場合は `source` パラメータに相対パスでモジュールのディレクトリを指定し、 `variable` として定義した変数を渡します。
-
-
-`terraform/envs/dev/cluster/main.tf`
-
-```hcl
-/**
- * ノードグループ
- */
-module node_group_1 {
-  source = "../../../modules/node-group"
-  app_name = local.app_name
-  stage = local.stage
-  node_group_name = "ng-1"
-  // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
-  instance_types = ["t3a.xlarge", "t3a.large", "t3a.medium", "t3.xlarge", "t3.large", "t3.medium"]
-  desired_size = 1
-
-  depends_on = [
-    module.eks
-  ]
-}
-
-```
-
-# ■ 出力の設定
-
-EKSクラスタのクラスタ名を出力します。
-
-`terraform/envs/dev/cluster/outputs.tf`
-
-```hcl
-output cluster_name {
+output "cluster_name" {
   value = local.cluster_name
 }
+
+output "project_dir" {
+  value = abspath("${path.module}/../../../..")
+}
 ```
 
-
-# ■ デプロイ
+## terraformデプロイ
 
 terraformを実行してVPCを作成してみましょう
 
 ```bash
+cd $PROJECT_DIR/tutorial/terraform/envs/dev/base
+
 # 初期化
-terraform -chdir=terraform/envs/dev/cluster init
+terraform init
 
 # デプロイ内容確認
-terraform -chdir=terraform/envs/dev/cluster plan
+terraform plan
 
 # デプロイ
-terraform -chdir=terraform/envs/dev/cluster apply -auto-approve
-```
-
-## 確認
-
-outputs.tfに定義したoutputを出力してみましょう
-
-```bash
-# output をすべて出力
-terraform -chdir=terraform/envs/dev/cluster output
-
-# 指定したoutputを出力
-terraform -chdir=terraform/envs/dev/cluster output cluster_name
-
-# スクリプトで利用しやすい形で出力
-terraform -chdir=terraform/envs/dev/cluster output -raw cluster_name
-```
-
-
-k9sでリソースを確認してみましょう
-
-```bash
-CLUSTER_NAME=$(terraform -chdir=terraform/envs/dev/cluster output -raw cluster_name)
-
-# ~/.kube/configを生成
-aws eks update-kubeconfig --name $CLUSTER_NAME
-
-# CURRENTに今作成したクラスタが選択されているかを確認
-kubectl config get-contexts
-
-# k9sを起動してリソースを確認
-k9s
+terraform apply -auto-approve
 ```

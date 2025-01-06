@@ -1,0 +1,9 @@
+#!/bin/bash
+
+export $(cat ${PROJECT_DIR}/.devcontainer/.env | grep -v -e "^$" -e "^ *#" | sed -e "s| *#.*$||" | xargs)
+
+complete -C '/usr/local/bin/aws_completer' aws
+source <(kubectl completion bash)
+source <(helm completion bash)
+source <(argocd completion bash)
+complete -C '/usr/local/bin/terraform' terraform

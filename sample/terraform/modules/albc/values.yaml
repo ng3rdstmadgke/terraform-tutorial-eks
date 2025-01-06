@@ -1,0 +1,11 @@
+clusterName: ${cluster_name}
+serviceAccount:
+  create: true
+  name: ${service_account}
+  annotations:
+    eks.amazonaws.com/role-arn: ${role_arn}
+image:
+  repository: public.ecr.aws/eks/aws-load-balancer-controller
+  tag: ${image_tag}
+region: ap-northeast-1
+vpcId: ${vpc_id}
