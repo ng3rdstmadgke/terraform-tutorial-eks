@@ -2,11 +2,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/plugin/terraform.tfstate"
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -29,7 +24,7 @@ provider "aws" {
 }
 
 module albc {
-  source = "../../../modules/albc"
+  source = "../../modules/plugin/albc"
   cluster_name = local.cluster_name
   vpc_id = local.vpc_id
   project_dir = local.project_dir

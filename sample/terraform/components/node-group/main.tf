@@ -2,11 +2,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/node-group/terraform.tfstate"
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -33,7 +28,7 @@ provider "aws" {
  * ノードグループ
  */
 module node_group_bottlerocket_1 {
-  source = "../../../modules/node-group-bottlerocket"
+  source = "../../modules/node-group/bottlerocket"
   cluster_name = local.cluster_name
   cluster_version = local.cluster_version
   cluster_security_group_id = local.cluster_security_group_id

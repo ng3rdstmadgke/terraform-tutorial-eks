@@ -2,11 +2,8 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/addon/terraform.tfstate"
     region = "ap-northeast-1"
     encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -50,7 +47,7 @@ resource "aws_eks_addon" "eks_pod_identity_agent" {
  *   https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/ebs-csi.html
  */
 module ebs_csi_driver {
-  source = "../../../modules/ebs-csi-driver"
+  source = "../../modules/addon/ebs-csi-driver"
   cluster_name = local.cluster_name
 }
 

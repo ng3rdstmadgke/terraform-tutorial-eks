@@ -2,11 +2,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/service/terraform.tfstate"
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -29,7 +24,7 @@ provider "aws" {
 }
 
 module keycloak {
-  source = "../../../modules/keycloak"
+  source = "../../modules/service/keycloak"
   cluster_name = local.cluster_name
   cluster_oidc_provider = local.oidc_provider
   cluster_security_group_id = local.cluster_security_group_id

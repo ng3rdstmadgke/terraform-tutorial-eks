@@ -2,11 +2,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/network/terraform.tfstate"
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -39,11 +34,11 @@ module "vpc" {
   version = "~> 5.17.0"
 
   name = "${local.cluster_name}-vpc"
-  cidr = local.vpc_cidr
+  cidr = var.vpc_cidr
 
   azs             = ["ap-northeast-1a", "ap-northeast-1c", "ap-northeast-1d"]
-  private_subnets = local.private_subnets
-  public_subnets  = local.public_subnets
+  private_subnets = var.private_subnets
+  public_subnets  = var.public_subnets
 
   enable_nat_gateway = true
   single_nat_gateway = true

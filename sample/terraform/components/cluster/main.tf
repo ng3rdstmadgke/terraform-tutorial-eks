@@ -2,11 +2,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "mido/dev/cluster/terraform.tfstate"
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -32,7 +27,7 @@ provider "aws" {
  * EKSクラスタ
  */
 module cluster {
-  source = "../../../modules/cluster"
+  source = "../../modules/cluster/eks"
   cluster_name = local.cluster_name
   subnet_ids = local.private_subnet_ids
   access_entries = var.access_entries

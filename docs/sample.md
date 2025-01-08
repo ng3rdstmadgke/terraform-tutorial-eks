@@ -8,71 +8,118 @@ devcontainerに含まれています。
 
 # ■ デプロイ
 
+```bash
+CLUSTER_NAME=tte-mido-dev
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/sample/terraform/components/tfvars/dev.backend.tfvars
+```
+
 ## ベーススタック
 
 
 ```bash
-cd $PROJECT_DIR/sample/terraform/envs/dev/base
+COMPONENT_NAME=base
+COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
-terraform init
-terraform plan
-terraform apply -auto-approve
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
+
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
+
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 ## ネットワークスタック
 
 ```bash
-cd $PROJECT_DIR/sample/terraform/envs/dev/network
+COMPONENT_NAME=network
+COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
-terraform init
-terraform plan
-terraform apply -auto-approve
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
+
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
+
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 
 ## EKSクラスタスタック
 
 ```bash
-cd $PROJECT_DIR/sample/terraform/envs/dev/cluster
+COMPONENT_NAME=cluster
+COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
-terraform init
-terraform plan
-terraform apply -auto-approve
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
+
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
+
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 ```bash
-CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/base output -raw cluster_name)
+CLUSTER_NAME=$(terraform -chdir=$COMPONENT_DIR output -raw cluster_name)
 aws eks update-kubeconfig --name $CLUSTER_NAME
 ```
 
 ## ノードグループスタック
 
 ```bash
-cd $PROJECT_DIR/sample/terraform/envs/dev/node-group
+COMPONENT_NAME=node-group
+COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
-terraform init
-terraform plan
-terraform apply -auto-approve
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
+
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
+
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 ## アドオンスタック
 
 ```bash
-cd $PROJECT_DIR/sample/terraform/envs/dev/addon
+COMPONENT_NAME=addon
+COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
-terraform init
-terraform plan
-terraform apply -auto-approve
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
+
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
+
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 ## プラグインスタック
 
 ```bash
-cd $PROJECT_DIR/sample/terraform/envs/dev/plugin
+COMPONENT_NAME=plugin
+COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
-terraform init
-terraform plan
-terraform apply -auto-approve
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
+
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
+
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 ### metrics-server
@@ -178,11 +225,18 @@ helm upgrade --install secrets-provider-aws aws-secrets-manager/secrets-store-cs
 
 
 ```bash
-cd $PROJECT_DIR/sample/terraform/envs/dev/service
+COMPONENT_NAME=service
+COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
-terraform init
-terraform plan
-terraform apply -auto-approve
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
+
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
+
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 ```bash
@@ -209,6 +263,8 @@ keycloakコンテナのshell内での操作
 
 # sslRequiredを無効化
 /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
+
+exit
 ```
 
 ALBのエンドポイントにアクセスしてログインできることを確認します。
@@ -218,10 +274,9 @@ ALBのエンドポイントにアクセスしてログインできることを�
 kubectl -n keycloak get ing
 
 # ログイン情報を確認
-CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/base output -raw cluster_name)
+CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/sample/terraform/components/base output -raw cluster_name)
 aws secretsmanager get-secret-value --secret-id /$CLUSTER_NAME/keycloak --query "SecretString" --output text  | jq "."
 ```
-
 
 # ■ 削除
 
