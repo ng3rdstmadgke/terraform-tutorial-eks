@@ -16,36 +16,50 @@ Chapter3 ネットワーク作成
 
 # ■ 変数定義
 
-※ `EDIT: ...` コメントの項目を各自編集してください
-
 `terraform/components/network/variables.tf`
 
 ```tf
-locals {
-  cluster_name = data.terraform_remote_state.base.outputs.cluster_name
-  vpc_cidr = "10.XX.0.0/16"  // EDIT: 重複しないCIDRを指定してください
-  private_subnets = [  // EDIT: VPCのCDIRに応じてプライベートサブネットのCIDRを3つ指定してください
-    "10.XX.1.0/24",
-    "10.XX.2.0/24",
-    "10.XX.3.0/24",
-  ]
-  public_subnets = [  // EDIT: VPCのCDIRに応じてパブリックサブネットのCIDRを3つ指定してください
-    "10.XX.101.0/24",
-    "10.XX.102.0/24",
-    "10.XX.103.0/24",
-  ]
+variable tfstate_bucket {
+  type = string
+  description = "tfvarsが保存されているバケット"
 }
 
-// baseコンポーネントのステートを参照
-data "terraform_remote_state" "base" {
+variable tfstate_region {
+  type = string
+  description = "tfvarsが保存されているバケットのリージョン"
+}
+
+variable tfstate_base_key {
+  type = string
+  description = "baseコンポーネントのtfstateファイルのパス"
+}
+
+variable "vpc_cidr" {
+  type = string
+  description = "VPCのCIDR"
+}
+
+variable "private_subnets" {
+  type = list(string)
+  description = "プライベートサブネットのCIDR"
+}
+
+variable "public_subnets" {
+  type = list(string)
+  description = "パブリックサブネットのCIDR"
+}
+
+locals {
+  cluster_name = data.terraform_remote_state.base.outputs.cluster_name
+}
+
+data terraform_remote_state "base" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/base/terraform.tfstate"  // EDIT: baseコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_base_key
   }
 }
 ```
@@ -55,8 +69,6 @@ data "terraform_remote_state" "base" {
 
 ## tfstateとプロバイダの設定
 
-※ `EDIT: ...` コメントの項目を各自編集してください
-
 `terraform/components/network/main.tf`
 
 
@@ -65,11 +77,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/network/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -111,11 +118,11 @@ module "vpc" {
   version = "~> 5.17.0"
 
   name = "${local.cluster_name}-vpc"
-  cidr = local.vpc_cidr
+  cidr = var.vpc_cidr
 
   azs             = ["ap-northeast-1a", "ap-northeast-1c", "ap-northeast-1d"]
-  private_subnets = local.private_subnets
-  public_subnets  = local.public_subnets
+  private_subnets = var.private_subnets
+  public_subnets  = var.public_subnets
 
   enable_nat_gateway = true
   single_nat_gateway = true
@@ -130,7 +137,6 @@ module "vpc" {
     "kubernetes.io/role/internal-elb" = "1"
   }
 }
-
 ```
 
 # ■ 出力値の定義
@@ -157,19 +163,65 @@ output "public_subnet_ids" {
 }
 ```
 
+# ■ networkコンポーネントの入力変数ファイルの作成
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+baseコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+
+`terraform/components/base/tfvars/dev.tfvars`
+
+```ini
+tfstate_bucket = "terraform-tutorial-eks-tfstate"
+tfstate_region = "ap-northeast-1"
+tfstate_base_key = "クラスタ名/base/terraform.tfstate"  # EDIT: クラスタ名を指定してください
+
+vpc_cidr = "10.xx.0.0/16"  # EDIT: 重複しないネットワークを指定してください
+private_subnets = [  # EDIT: 重複しないネットワークを指定してください
+  "10.xx.1.0/24",
+  "10.xx.2.0/24",
+  "10.xx.3.0/24",
+]
+public_subnets = [  # EDIT: 重複しないネットワークを指定してください
+  "10.xx.101.0/24",
+  "10.xx.102.0/24",
+  "10.xx.103.0/24",
+]
+```
+
 # ■ terraformデプロイ
 
 terraformを実行してVPCを作成してみましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/components/network
+# クラスタ名
+CLUSTER_NAME=クラスタ名
+# tfstateの保存先を定義した変数ファイル
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+# コンポーネント名
+COMPONENT_NAME=network
+# コンポーネントディレクトリ
+COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
+# コンポーネントの入力変数ファイル
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
 # 初期化
-terraform init
+# -chdir terraformコマンドを実行するディレクトリ
+# -reconfigure tfstateのバックエンド設定を再構成します
+# -backend-config tfstateのバックエンド設定をファイルファイルまたは変数で指定します
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
 
-# デプロイ内容確認
-terraform plan
+# デプロイ内容の確認
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
 
 # デプロイ
-terraform apply -auto-approve
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+# -auto-approve terraformデプロイ時の確認プロンプトをスキップします
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```

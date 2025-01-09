@@ -420,7 +420,7 @@ terraformを実行してVPCを作成してみましょう
 
 ```bash
 # クラスタ名
-CLUSTER_NAME=tte-xxxxx-dev
+CLUSTER_NAME=クラスタ名
 # tfstateの保存先を定義した変数ファイル
 COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
 # コンポーネント名
