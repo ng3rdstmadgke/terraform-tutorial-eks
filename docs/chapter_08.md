@@ -36,13 +36,34 @@ Keycloakのデプロイに必要な周辺AWSリソースの作成と、マニフ
 `terraform/modules/service/keycloak/variables.tf`
 
 ```tf
-variable "cluster_name" {}
-variable "cluster_oidc_provider" {}
-variable "cluster_security_group_id" {}
-variable "alb_ingress_sg" {}
-variable "vpc_id" {}
-variable "private_subnet_ids" {}
-variable "project_dir" {}
+variable "cluster_name" {
+  type = string
+  description = "EKSクラスタ名"
+}
+variable "cluster_oidc_provider" {
+  type = string
+  description = "EKSクラスタのOIDCプロバイダ"
+}
+variable "cluster_security_group_id" {
+  type = string
+  description = "EKSクラスタのクラスタセキュリティグループID"
+}
+variable "alb_ingress_sg" {
+  type = string
+  description = "ALB Ingress ControllerのセキュリティグループID"
+}
+variable "vpc_id" {
+  type = string
+  description = "VPC ID"
+}
+variable "private_subnet_ids" {
+  type = list(string)
+  description = "プライベートサブネットID"
+}
+variable "project_dir" {
+  type = string
+  description = "プロジェクトディレクトリの絶対パス"
+}
 
 locals {
   account_id = data.aws_caller_identity.this.account_id
@@ -52,6 +73,7 @@ locals {
   db_user = "admin"
   db_name = "keycloak"
 }
+
 
 data "aws_caller_identity" "this" {}
 
@@ -577,11 +599,39 @@ ServiceコンポーネントはEKS上にデプロイされるアプリケーシ�
 
 必要な変数はbase, network, cluster, pluginコンポーネントから参照します。
 
-※ `EDIT: ...` コメントの項目を各自編集してください
-
 `terraform/components/service/variables.tf`
 
 ```tf
+variable tfstate_bucket {
+  type = string
+  description = "tfvarsが保存されているバケット"
+}
+
+variable tfstate_region {
+  type = string
+  description = "tfvarsが保存されているバケットのリージョン"
+}
+
+variable tfstate_base_key {
+  type = string
+  description = "baseコンポーネントのtfstateファイルのパス"
+}
+
+variable tfstate_network_key {
+  type = string
+  description = "networkコンポーネントのtfstateファイルのパス"
+}
+
+variable tfstate_cluster_key {
+  type = string
+  description = "clusterコンポーネントのtfstateファイルのパス"
+}
+
+variable tfstate_plugin_key {
+  type = string
+  description = "pluginコンポーネントのtfstateファイルのパス"
+}
+
 locals {
   cluster_name = data.terraform_remote_state.base.outputs.cluster_name
   alb_ingress_sg = data.terraform_remote_state.plugin.outputs.alb_ingress_sg
@@ -596,11 +646,9 @@ data "terraform_remote_state" "base" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/base/terraform.tfstate"  // EDIT: baseコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_base_key
   }
 }
 
@@ -608,11 +656,9 @@ data "terraform_remote_state" "network" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/network/terraform.tfstate"  // EDIT: networkコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_network_key
   }
 }
 
@@ -620,11 +666,9 @@ data "terraform_remote_state" "cluster" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/cluster/terraform.tfstate"  // EDIT: clusterコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_cluster_key
   }
 }
 
@@ -632,18 +676,14 @@ data "terraform_remote_state" "plugin" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/plugin/terraform.tfstate"  // EDIT: pluginコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_plugin_key
   }
 }
 ```
 
 ## tfstateとプロバイダの設定
-
-※ `EDIT: ...` コメントの項目を各自編集してください
 
 `terraform/components/service/main.tf`
 
@@ -652,11 +692,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/service/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -687,7 +722,7 @@ provider "aws" {
 
 ```tf
 module keycloak {
-  source = "../../../modules/keycloak"
+  source = "../../modules/service/keycloak"
   cluster_name = local.cluster_name
   cluster_oidc_provider = local.oidc_provider
   cluster_security_group_id = local.cluster_security_group_id
@@ -698,21 +733,60 @@ module keycloak {
 }
 ```
 
+
+# ■ service コンポーネントの入力変数ファイルの作成
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+service コンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+
+`terraform/components/service/tfvars/dev.tfvars`
+
+```ini
+tfstate_bucket = "terraform-tutorial-eks-tfstate"
+tfstate_region = "ap-northeast-1"
+tfstate_base_key = "クラスタ名/base/terraform.tfstate"  # EDIT: クラスタ名を指定
+tfstate_network_key = "クラスタ名/network/terraform.tfstate"  # EDIT: クラスタ名を指定
+tfstate_cluster_key = "クラスタ名/cluster/terraform.tfstate"  # EDIT: クラスタ名を指定
+tfstate_plugin_key = "クラスタ名/plugin/terraform.tfstate"  # EDIT: クラスタ名を指定
+```
+
+
 # ■ terraformデプロイ
 
 terraformを実行してチャートのインストールに必要なAWSリソースを作成しましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/components/service
+# クラスタ名
+CLUSTER_NAME=クラスタ名
+# tfstateの保存先を定義した変数ファイル
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+# コンポーネント名
+COMPONENT_NAME=service
+# コンポーネントディレクトリ
+COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
+# コンポーネントの入力変数ファイル
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
 # 初期化
-terraform init
+# -chdir terraformコマンドを実行するディレクトリ
+# -reconfigure tfstateのバックエンド設定を再構成します
+# -backend-config tfstateのバックエンド設定をファイルファイルまたは変数で指定します
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
 
-# デプロイ内容確認
-terraform plan
+# デプロイ内容の確認
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
 
 # デプロイ
-terraform apply -auto-approve
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+# -auto-approve terraformデプロイ時の確認プロンプトをスキップします
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 作成し終わったらSecretsManagerに登録された値を確認してみましょう。
