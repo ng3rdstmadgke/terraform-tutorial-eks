@@ -302,8 +302,6 @@ resource "aws_eks_node_group" "this" {
 
 必要な変数はclusterコンポーネントから参照します。
 
-※ `EDIT: ...` コメントの項目を各自編集してください
-
 `terraform/components/node-group/variables.tf`
 
 ```tf

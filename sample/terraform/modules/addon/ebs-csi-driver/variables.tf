@@ -1,1 +1,4 @@
-variable cluster_name {}
+variable cluster_name {
+  type = string
+  description = "EKSクラスタ名"
+}

@@ -401,8 +401,6 @@ output "eks_cluster" {
 - `access_entries` : KubernetesのAPIにアクセス可能なIAMユーザまたはIAMロールのARN
 
 
-※ `EDIT: ...` コメントの項目を各自編集してください
-
 `terraform/components/cluster/variables.tf`
 
 ```tf

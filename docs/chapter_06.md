@@ -29,7 +29,10 @@ ebs-csi-driverアドオンのインストールに必要な付随リソースを
 `terraform/modules/addon/ebs-csi-driver/variables.tf`
 
 ```tf
-variable cluster_name {}
+variable cluster_name {
+  type = string
+  description = "EKSクラスタ名"
+}
 ```
 
 ## モジュールのリソースの定義
@@ -133,11 +136,24 @@ output role_arn {
 
 ## 変数定義
 
-※ `EDIT: ...` コメントの項目を各自編集してください
-
 `terraform/components/addon/variables.tf`
 
 ```tf
+variable tfstate_bucket {
+  type = string
+  description = "tfvarsが保存されているバケット"
+}
+
+variable tfstate_region {
+  type = string
+  description = "tfvarsが保存されているバケットのリージョン"
+}
+
+variable tfstate_cluster_key {
+  type = string
+  description = "clusterコンポーネントのtfstateファイルのパス"
+}
+
 locals {
   cluster_name = data.terraform_remote_state.cluster.outputs.cluster_name
 }
@@ -146,18 +162,15 @@ data terraform_remote_state "cluster" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/cluster/terraform.tfstate"  // EDIT: clusterコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_cluster_key
   }
 }
+
 ```
 
 ## tfstateとプロバイダの設定
-
-※ `EDIT: ...` コメントの項目を各自編集してください
 
 `terraform/components/addon/main.tf`
 
@@ -166,11 +179,8 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/addon/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
     region = "ap-northeast-1"
     encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -231,9 +241,15 @@ EBS CSI Driverのインストールを定義します。
 ebs-csi-driverモジュールを呼び出してIAMロールを作成し、pod-identityの仕組みでサービスアカウントにIAMロールを紐づけます。  
 pod-identityの仕組みを利用する都合上、Pod Identity Agentのインストール後にインストールしなければならないので、depends_onに `aws_eks_addon.eks_pod_identity_agent` を設定します。
 
-
-
 参考: [Amazon EBS で Kubernetes ボリュームを保存する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/ebs-csi.html)
+
+最新バージョンは下記コマンドで確認します。
+
+```bash
+aws eks describe-addon-versions \
+  --addon-name aws-ebs-csi-driver \
+  --query "addons[0].addonVersions[].addonVersion"
+```
 
 `terraform/components/addon/main.tf`
 
@@ -243,7 +259,7 @@ pod-identityの仕組みを利用する都合上、Pod Identity Agentのイン�
  * EBS CSI Driver
  */
 module ebs_csi_driver {
-  source = "../../../modules/ebs-csi-driver"
+  source = "../../modules/addon/ebs-csi-driver"
   cluster_name = local.cluster_name
 }
 
@@ -268,6 +284,13 @@ EBS CSI Snapshot Controllerのインストールを定義します。
 
 参考: [Amazon EKS クラスターでアドオンを活用し、Amazon EBS スナップショットを永続ストレージに使用する: AWS](https://aws.amazon.com/jp/blogs/news/using-amazon-ebs-snapshots-for-persistent-storage-with-your-amazon-eks-cluster-by-leveraging-add-ons/)
 
+最新バージョンは下記コマンドで確認します。
+
+```bash
+aws eks describe-addon-versions \
+  --addon-name snapshot-controller \
+  --query "addons[0].addonVersions[].addonVersion"
+```
 
 `terraform/components/addon/main.tf`
 
@@ -284,19 +307,53 @@ resource "aws_eks_addon" "snapshot_controller" {
 }
 ```
 
+# ■ addon コンポーネントの入力変数ファイルの作成
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+addonコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+
+`terraform/components/addon/tfvars/dev.tfvars`
+
+```ini
+tfstate_bucket = "terraform-tutorial-eks-tfstate"
+tfstate_region = "ap-northeast-1"
+tfstate_cluster_key = "クラスタ名/cluster/terraform.tfstate"  # EDIT: クラスタ名を指定
+```
+
 # ■ terraformデプロイ
 
 terraformを実行してアドオンをインストールしましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/components/addon
+# クラスタ名
+CLUSTER_NAME=クラスタ名
+# tfstateの保存先を定義した変数ファイル
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+# コンポーネント名
+COMPONENT_NAME=addon
+# コンポーネントディレクトリ
+COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
+# コンポーネントの入力変数ファイル
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
 # 初期化
-terraform init
+# -chdir terraformコマンドを実行するディレクトリ
+# -reconfigure tfstateのバックエンド設定を再構成します
+# -backend-config tfstateのバックエンド設定をファイルファイルまたは変数で指定します
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
 
-# デプロイ内容確認
-terraform plan
+# デプロイ内容の確認
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
 
 # デプロイ
-terraform apply -auto-approve
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+# -auto-approve terraformデプロイ時の確認プロンプトをスキップします
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
