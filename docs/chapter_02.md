@@ -224,18 +224,27 @@ tutorial/
   service/
     keycloak/                   # keycloakをEKSにデプロイするためのマニフェストファイルなど
   terraform/
-    components/                       # dev, stg, prd など、各環境のリソース作成のエントリーポイントとなるディレクトリを格納
+    components/             # コンポーネントを格納するディレクトリ
       base/                   # いろいろなコンポーネントで利用される共通変数など
       network/                # VPC, サブネットなど
       cluster/                # EKSクラスタ
+        tfvars/                 # 環境ごとの変数ファイルを格納するディレクトリ
+          dev.tfvars              # dev環境の変数ファイル
+        main.tf                 # リソースを定義するファイル
+        outputs.tf              # 出力値を定義するファイル
+        variables.tf            # 入力変数を定義するファイル
       node-group/             # EKSのノードグループ, 起動テンプレートなど
       addon/                  # EKSのアドオン関連
       plugin/                 # helmでインストールするチャートに付随するリソース
       service/                # EKSにデプロイするサービスに付随するリソース
       tfvars/                 # コンポーネントで共通の変数を格納
-    modules/                  # サービス毎・ライフサイクル毎にある程度リソースをグループ化したモジュールを配置
+    modules/                # モジュールを格納するディレクトリ
       addon/                  # addonコンポーネントに関連するモジュール
       cluster/                # clusterコンポーネントに関連するモジュール
+        eks/                    # eksモジュール
+          main.tf                 # リソースを定義するファイル
+          outputs.tf              # 出力値を定義するファイル
+          variables.tf            # 入力変数を定義するファイル
       node-group/             # node-groupコンポーネントに関連するモジュール
       plugin/                 # pluginコンポーネントに関連するモジュール
       service/                # serviceコンポーネントに関連するモジュール
