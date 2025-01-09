@@ -37,15 +37,37 @@ OSにBottlerocketを利用するノードグループを作成するモジュー
 `terraform/modules/node-group/bottlerocket/variables.tf`
 
 ```tf
-variable cluster_name {}
-variable cluster_version {}
-variable cluster_security_group_id {}
-variable cluster_api_endpoint {}
-variable cluster_certificate {}
-variable cluster_subnet_ids {}
-variable node_group_name {}
+variable cluster_name {
+  type = string
+  description = "EKSクラスタ名"
+}
+variable cluster_version {
+  type = string
+  description = "Kubernetesバージョン"
+}
+variable cluster_security_group_id {
+  type = string
+  description = "EKSクラスタのクラスタセキュリティグループID"
+}
+variable cluster_api_endpoint {
+  type = string
+  description = "EKSクラスタのAPIエンドポイント"
+}
+variable cluster_certificate {
+  type = string
+  description = "EKSクラスタの証明書"
+}
+variable cluster_subnet_ids {
+  type = list(string)
+  description = "EKSクラスタのサブネットID"
+}
+variable node_group_name {
+  type = string
+  description = "ノードグループ名"
+}
 variable ami_type {
   type = string
+  description = "ノードのAMIタイプ"
   validation {
     condition = contains([
       "BOTTLEROCKET_ARM_64",
@@ -58,10 +80,12 @@ variable ami_type {
 }
 variable instance_types {
   type = list(string)
+  description = "ノードのインスタンスタイプ"
   default = ["m6a.large"]
 }
 variable desired_size {
   type = number
+  description = "起動するノード数"
   default = 1
 }
 
@@ -283,6 +307,21 @@ resource "aws_eks_node_group" "this" {
 `terraform/components/node-group/variables.tf`
 
 ```tf
+variable tfstate_bucket {
+  type = string
+  description = "tfvarsが保存されているバケット"
+}
+
+variable tfstate_region {
+  type = string
+  description = "tfvarsが保存されているバケットのリージョン"
+}
+
+variable tfstate_cluster_key {
+  type = string
+  description = "clusterコンポーネントのtfstateファイルのパス"
+}
+
 locals {
   cluster_name = data.terraform_remote_state.cluster.outputs.cluster_name
   cluster_version = data.terraform_remote_state.cluster.outputs.version
@@ -296,18 +335,14 @@ data terraform_remote_state "cluster" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/cluster/terraform.tfstate"  // EDIT: clusterコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_cluster_key
   }
 }
 ```
 
 ## tfstateとプロバイダの設定
-
-※ `EDIT: ...` コメントの項目を各自編集してください
 
 `terraform/components/node-group/main.tf`
 
@@ -316,11 +351,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/node-group/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -354,7 +384,7 @@ provider "aws" {
  * ノードグループ
  */
 module node_group_bottlerocket_1 {
-  source = "../../../modules/node-group-bottlerocket"
+  source = "../../modules/node-group/bottlerocket"
   cluster_name = local.cluster_name
   cluster_version = local.cluster_version
   cluster_security_group_id = local.cluster_security_group_id
@@ -368,19 +398,53 @@ module node_group_bottlerocket_1 {
 }
 ```
 
+# ■ node-group コンポーネントの入力変数ファイルの作成
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+node-groupコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+
+`terraform/components/node-group/tfvars/dev.tfvars`
+
+```ini
+tfstate_bucket = "terraform-tutorial-eks-tfstate"
+tfstate_region = "ap-northeast-1"
+tfstate_cluster_key = "クラスタ名/cluster/terraform.tfstate"  # EDIT: クラスタ名を指定
+```
+
 # ■ terraformデプロイ
 
-terraformを実行してノードグループを作成してみましょう
+terraformを実行してEKSを作成してみましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/components/node-group
+# クラスタ名
+CLUSTER_NAME=クラスタ名
+# tfstateの保存先を定義した変数ファイル
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+# コンポーネント名
+COMPONENT_NAME=node-group
+# コンポーネントディレクトリ
+COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
+# コンポーネントの入力変数ファイル
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
 # 初期化
-terraform init
+# -chdir terraformコマンドを実行するディレクトリ
+# -reconfigure tfstateのバックエンド設定を再構成します
+# -backend-config tfstateのバックエンド設定をファイルファイルまたは変数で指定します
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
 
-# デプロイ内容確認
-terraform plan
+# デプロイ内容の確認
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
 
 # デプロイ
-terraform apply -auto-approve
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+# -auto-approve terraformデプロイ時の確認プロンプトをスキップします
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```

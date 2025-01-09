@@ -602,7 +602,7 @@ output "subnet_ids" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-baseコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+clusterコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
 
 `terraform/components/cluster/tfvars/dev.tfvars`
 
@@ -657,7 +657,7 @@ terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 
 ```bash
 # ~/.kube/configに作成したEKSクラスタを設定
-CLUSTER_NAME=$(terraform output -raw cluster_name)
+CLUSTER_NAME=$(terraform -chdir=$COMPONENT_DIR output -raw cluster_name)
 aws eks update-kubeconfig --name $CLUSTER_NAME
 
 # EKSクラスタを確認

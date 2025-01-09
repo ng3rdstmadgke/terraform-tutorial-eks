@@ -167,7 +167,7 @@ output "public_subnet_ids" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-baseコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+networkコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
 
 `terraform/components/network/tfvars/dev.tfvars`
 
