@@ -169,7 +169,7 @@ output "public_subnet_ids" {
 
 baseコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
 
-`terraform/components/base/tfvars/dev.tfvars`
+`terraform/components/network/tfvars/dev.tfvars`
 
 ```ini
 tfstate_bucket = "terraform-tutorial-eks-tfstate"

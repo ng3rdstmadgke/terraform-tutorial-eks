@@ -31,13 +31,17 @@ EKSクラスタとその関連リソースをモジュールとして、ひと�
 `terraform/modules/cluster/eks/variables.tf`
 
 ```tf
-variable cluster_name {}
+variable cluster_name {
+  type = string
+  description = "EKSクラスタ名"
+}
 variable subnet_ids {
   type = list(string)
+  description = "EKSクラスタを作成するサブネットID"
 }
 variable access_entries {
   type = list(string)
-  description = "arn:aws:iam::111111111111:user/xxxxxxxxxxxxxxxx or arn:aws:iam::111111111111:role/xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  description = "EKSのIAMアクセスエントリに登録するIAMユーザまたはIAMロールのARN"
 }
 
 data "aws_caller_identity" "self" { }
@@ -61,6 +65,10 @@ locals {
 ```tf
  /**
   * コントロールプレーンのログを保存するロググループ
+  *
+  * ロググループ名は /aws/eks/{MY_CLUSTER}/cluster で固定
+  * 参考: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/control-plane-logs.html
+  *
   */
 resource "aws_cloudwatch_log_group" "eks_control_plane" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group
@@ -74,7 +82,6 @@ resource "aws_cloudwatch_log_group" "eks_control_plane" {
     Name = "/aws/eks/${var.cluster_name}/cluster"
   }
 }
-
 ```
 
 ### クラスタロール
@@ -235,7 +242,6 @@ resource "aws_kms_alias" "kubernetes_encription" {
   name = "alias/eks/${var.cluster_name}"
   target_key_id = aws_kms_key.kubernetes_encription.key_id
 }
-
 ```
 
 ### EKSクラスタ
@@ -400,10 +406,29 @@ output "eks_cluster" {
 `terraform/components/cluster/variables.tf`
 
 ```tf
-// EKSのアクセスエントリに追加するIAMユーザまたはIAMロールのARN
+variable tfstate_bucket {
+  type = string
+  description = "tfvarsが保存されているバケット"
+}
+
+variable tfstate_region {
+  type = string
+  description = "tfvarsが保存されているバケットのリージョン"
+}
+
+variable tfstate_base_key {
+  type = string
+  description = "baseコンポーネントのtfstateファイルのパス"
+}
+
+variable tfstate_network_key {
+  type = string
+  description = "networkコンポーネントのtfstateファイルのパス"
+}
+
 variable access_entries {
   type = list(string)
-  description = "arn:aws:iam::111111111111:user/xxxxxxxxxxxxxxxx, arn:aws:iam::111111111111:role/xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  description = "EKSのIAMアクセスエントリに登録するIAMユーザまたはIAMロールのARN"
 }
 
 locals {
@@ -416,11 +441,9 @@ data terraform_remote_state "base" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/base/terraform.tfstate"  // EDIT: baseコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_base_key
   }
 }
 
@@ -431,33 +454,15 @@ data "terraform_remote_state" "network" {
 
   config = {
     // https://developer.hashicorp.com/terraform/language/backend/s3
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/network/terraform.tfstate"  // EDIT: networkコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_network_key
   }
 }
 ```
 
-変数として入力する値( `access_entries` )を `secrets.auto.tfvars` に設定します。  
-※ `secrets.auto.tfvars` は特殊なファイルで、通常 `terraform apply` 時に入力する変数をあらかじめファイルで定義しておくことができます。  
-
-AWSマネジメントコンソールにログインするユーザーと、Terraformを実行するロールを設定してください。
-
-`terraform/components/cluster/secrets.auto.tfvars`
-
-```tf
-access_entries = [
-  "arn:aws:iam::xxxxxxxxxxxx:user/xxxxxxxxxxxxxxxx",
-  "arn:aws:iam::xxxxxxxxxxxx:role/xxxxxxxxxxxxxxxxxxxxxxxxxxx",
-]
-
-```
-
 ## tfstateとプロバイダの設定
 
-※ `EDIT: ...` コメントの項目を各自編集してください
 
 `terraform/components/cluster/main.tf`
 
@@ -466,11 +471,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/cluster/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -504,7 +504,7 @@ provider "aws" {
  * EKSクラスタ
  */
 module cluster {
-  source = "../../../modules/cluster"
+  source = "../../modules/cluster/eks"
   cluster_name = local.cluster_name
   subnet_ids = local.private_subnet_ids
   access_entries = var.access_entries
@@ -526,6 +526,8 @@ module cluster {
 ```tf
 /**
  * IAMユーザー・ロールにkubernetesAPIへのアクセス権限を付与
+ * - EKS アクセスエントリを使用して Kubernetes へのアクセスを IAM ユーザーに許可する | AWS
+ *   https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-entries.html
  */
 resource "aws_eks_access_entry" "admin" {
   // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry
@@ -596,21 +598,59 @@ output "subnet_ids" {
 }
 ```
 
+# ■ clusterコンポーネントの入力変数ファイルの作成
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+baseコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+
+`terraform/components/cluster/tfvars/dev.tfvars`
+
+```ini
+tfstate_bucket = "terraform-tutorial-eks-tfstate"
+tfstate_region = "ap-northeast-1"
+tfstate_base_key = "クラスタ名/base/terraform.tfstate"  # EDIT: クラスタ名を指定
+tfstate_network_key = "クラスタ名/network/terraform.tfstate"  # EDIT: クラスタ名を指定
+access_entries = [  # EDIT: Kubernetes APIへのアクセス権限を付与していIAMユーザー・ロールを指定
+  "arn:aws:iam::xxxxxxxxxxxx:user/xxxxxxxxxxxxxxxx",
+]
+```
+
 # ■ terraformデプロイ
 
 terraformを実行してEKSを作成してみましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/components/cluster
+# クラスタ名
+CLUSTER_NAME=クラスタ名
+# tfstateの保存先を定義した変数ファイル
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+# コンポーネント名
+COMPONENT_NAME=cluster
+# コンポーネントディレクトリ
+COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
+# コンポーネントの入力変数ファイル
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
 # 初期化
-terraform init
+# -chdir terraformコマンドを実行するディレクトリ
+# -reconfigure tfstateのバックエンド設定を再構成します
+# -backend-config tfstateのバックエンド設定をファイルファイルまたは変数で指定します
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
 
-# デプロイ内容確認
-terraform plan
+# デプロイ内容の確認
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
 
 # デプロイ
-terraform apply -auto-approve
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+# -auto-approve terraformデプロイ時の確認プロンプトをスキップします
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 # ■ Kubernetesへのアクセス

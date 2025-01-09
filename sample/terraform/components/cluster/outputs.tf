@@ -1,6 +1,5 @@
 output "cluster_name" {
   value = module.cluster.eks_cluster.name
-    
 }
 
 output "version" {

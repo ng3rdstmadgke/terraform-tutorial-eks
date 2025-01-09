@@ -1,10 +1,14 @@
-variable cluster_name {}
+variable cluster_name {
+  type = string
+  description = "EKSクラスタ名"
+}
 variable subnet_ids {
   type = list(string)
+  description = "EKSクラスタを作成するサブネットID"
 }
 variable access_entries {
   type = list(string)
-  description = "arn:aws:iam::111111111111:user/xxxxxxxxxxxxxxxx or arn:aws:iam::111111111111:role/xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  description = "EKSのIAMアクセスエントリに登録するIAMユーザまたはIAMロールのARN"
 }
 
 data "aws_caller_identity" "self" { }
