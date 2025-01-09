@@ -39,13 +39,23 @@ Chapter7 プラグインインストール
 `terraform/modules/plugin/albc/variables.tf`
 
 ```tf
-variable cluster_name {}
-variable vpc_id {}
-variable project_dir {}
+variable cluster_name {
+  type = string
+  description = "EKSクラスタ名"
+}
+variable vpc_id {
+  type = string
+  description = "VPC ID"
+}
+variable project_dir {
+  type = string
+  description = "プロジェクトディレクトリの絶対パス"
+}
 variable ingress_cidr_blocks {
   // ALBへのアクセスを許可するCIDR
   type = list(string)
   default = ["0.0.0.0/0"]
+  description = "ALBへのアクセスを許可するCIDR"
 }
 
 locals {
@@ -53,6 +63,7 @@ locals {
   service_account = "aws-load-balancer-controller"
   app_version = "v2.11.0"
 }
+
 ```
 
 ## モジュールのリソース定義
@@ -229,11 +240,34 @@ ServiceコンポーネントはKubernetesのプラグインのインストール
 
 必要な変数はbase, network, clusterコンポーネントから参照します。
 
-※ `EDIT: ...` コメントの項目を各自編集してください
-
 `terraform/components/plugin/variables.tf`
 
 ```tf
+variable tfstate_bucket {
+  type = string
+  description = "tfvarsが保存されているバケット"
+}
+
+variable tfstate_region {
+  type = string
+  description = "tfvarsが保存されているバケットのリージョン"
+}
+
+variable tfstate_base_key {
+  type = string
+  description = "baseコンポーネントのtfstateファイルのパス"
+}
+
+variable tfstate_network_key {
+  type = string
+  description = "networkコンポーネントのtfstateファイルのパス"
+}
+
+variable tfstate_cluster_key {
+  type = string
+  description = "clusterコンポーネントのtfstateファイルのパス"
+}
+
 locals {
   project_dir = data.terraform_remote_state.base.outputs.project_dir
   cluster_name = data.terraform_remote_state.cluster.outputs.cluster_name
@@ -244,23 +278,9 @@ data terraform_remote_state "base" {
   backend = "s3"
 
   config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/base/terraform.tfstate"  // EDIT: baseコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
-  }
-}
-
-data terraform_remote_state "cluster" {
-  backend = "s3"
-
-  config = {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/cluster/terraform.tfstate"  // EDIT: clusterコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_base_key
   }
 }
 
@@ -269,19 +289,24 @@ data "terraform_remote_state" "network" {
   backend = "s3"
 
   config = {
-    // https://developer.hashicorp.com/terraform/language/backend/s3
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/network/terraform.tfstate"  // EDIT: networkコンポーネントのkeyに設定した値を設定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_network_key
+  }
+}
+
+data terraform_remote_state "cluster" {
+  backend = "s3"
+
+  config = {
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = var.tfstate_cluster_key
   }
 }
 ```
 
 ## tfstateとプロバイダの設定
-
-※ `EDIT: ...` コメントの項目を各自編集してください
 
 `terraform/components/plugin/main.tf`
 
@@ -290,11 +315,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/plugin/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -325,7 +345,7 @@ provider "aws" {
 
 ```tf
 module albc {
-  source = "../../../modules/albc"
+  source = "../../modules/plugin/albc"
   cluster_name = local.cluster_name
   vpc_id = local.vpc_id
   project_dir = local.project_dir
@@ -342,22 +362,58 @@ output "alb_ingress_sg" {
 }
 ```
 
+# ■ plugin コンポーネントの入力変数ファイルの作成
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+plugin コンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+
+`terraform/components/plugin/tfvars/dev.tfvars`
+
+```ini
+tfstate_bucket = "terraform-tutorial-eks-tfstate"
+tfstate_region = "ap-northeast-1"
+tfstate_base_key = "クラスタ名/base/terraform.tfstate"  # EDIT: クラスタ名を指定
+tfstate_network_key = "クラスタ名/network/terraform.tfstate"  # EDIT: クラスタ名を指定
+tfstate_cluster_key = "クラスタ名/cluster/terraform.tfstate"  # EDIT: クラスタ名を指定
+```
+
 
 # ■ terraformデプロイ
 
 terraformを実行してチャートのインストールに必要なAWSリソースを作成しましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/components/plugin
+# クラスタ名
+CLUSTER_NAME=クラスタ名
+# tfstateの保存先を定義した変数ファイル
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+# コンポーネント名
+COMPONENT_NAME=plugin
+# コンポーネントディレクトリ
+COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
+# コンポーネントの入力変数ファイル
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
 # 初期化
-terraform init
+# -chdir terraformコマンドを実行するディレクトリ
+# -reconfigure tfstateのバックエンド設定を再構成します
+# -backend-config tfstateのバックエンド設定をファイルファイルまたは変数で指定します
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
 
-# デプロイ内容確認
-terraform plan
+# デプロイ内容の確認
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
 
 # デプロイ
-terraform apply -auto-approve
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+# -auto-approve terraformデプロイ時の確認プロンプトをスキップします
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```
 
 # ■ aws-load-balancer-controller のインストール
