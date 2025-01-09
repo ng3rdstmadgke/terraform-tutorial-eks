@@ -18,7 +18,7 @@ Chapter3 ネットワーク作成
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/network/variables.tf`
+`terraform/components/network/variables.tf`
 
 ```tf
 locals {
@@ -57,7 +57,7 @@ data "terraform_remote_state" "base" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/network/main.tf`
+`terraform/components/network/main.tf`
 
 
 ```tf
@@ -96,7 +96,7 @@ provider "aws" {
 
 VPCの構築には [terraform-aws-modules/vpc/aws](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest) モジュールを利用します。  
 
-`terraform/envs/dev/network/main.tf`
+`terraform/components/network/main.tf`
 
 
 ```tf
@@ -137,7 +137,7 @@ module "vpc" {
 
 他のコンポーネントから参照するための値を出力値として定義します。
 
-`terraform/envs/dev/network/outputs.tf`
+`terraform/components/network/outputs.tf`
 
 ```tf
 output "vpc_id" {
@@ -162,7 +162,7 @@ output "public_subnet_ids" {
 terraformを実行してVPCを作成してみましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/envs/dev/network
+cd $PROJECT_DIR/tutorial/terraform/components/network
 
 # 初期化
 terraform init

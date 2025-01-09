@@ -36,7 +36,7 @@ Chapter7 プラグインインストール
 - `project_dir`
 - `ingress_cidr_blocks`
 
-`terraform/modules/albc/variables.tf`
+`terraform/modules/plugin/albc/variables.tf`
 
 ```tf
 variable cluster_name {}
@@ -64,7 +64,7 @@ locals {
 
 参考: [マニフェストを使用して AWS Load Balancer Controller インストールする](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-manifest.html)
 
-`terraform/modules/albc/main.tf`
+`terraform/modules/plugin/albc/main.tf`
 
 ```tf
 /**
@@ -124,7 +124,7 @@ resource "aws_eks_pod_identity_association" "albc" {
 ALBに紐づけるセキュリティグループを定義します。
 
 
-`terraform/modules/albc/main.tf`
+`terraform/modules/plugin/albc/main.tf`
 
 ```tf
 /**
@@ -169,7 +169,7 @@ resource "aws_security_group" "alb_ingress" {
 
 Helmでalbcをインストールする際に指定するvalues.yamlファイルを動的に生成します。
 
-`terraform/modules/albc/main.tf`
+`terraform/modules/plugin/albc/main.tf`
 
 ```tf
 /**
@@ -193,7 +193,7 @@ resource "local_file" "albc_values" {
 
 values.yamlのテンプレートファイル
 
-`terraform/modules/albc/values.yaml`
+`terraform/modules/plugin/albc/values.yaml`
 
 ```yml
 clusterName: ${cluster_name}
@@ -211,7 +211,7 @@ vpcId: ${vpc_id}
 
 ## モジュールの出力値の定義
 
-`terraform/modules/albc/outputs.tf`
+`terraform/modules/plugin/albc/outputs.tf`
 
 ```tf
 output "alb_ingress_sg" {
@@ -231,7 +231,7 @@ ServiceコンポーネントはKubernetesのプラグインのインストール
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/plugin/variables.tf`
+`terraform/components/plugin/variables.tf`
 
 ```tf
 locals {
@@ -283,7 +283,7 @@ data "terraform_remote_state" "network" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/plugin/main.tf`
+`terraform/components/plugin/main.tf`
 
 ```tf
 terraform {
@@ -321,7 +321,7 @@ provider "aws" {
 
 先ほど定義した albcモジュールを呼び出します。
 
-`terraform/envs/dev/plugin/main.tf`
+`terraform/components/plugin/main.tf`
 
 ```tf
 module albc {
@@ -334,7 +334,7 @@ module albc {
 
 ## 出力値の定義
 
-`terraform/envs/dev/plugin/main.tf`
+`terraform/components/plugin/main.tf`
 
 ```tf
 output "alb_ingress_sg" {
@@ -348,7 +348,7 @@ output "alb_ingress_sg" {
 terraformを実行してチャートのインストールに必要なAWSリソースを作成しましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/envs/dev/plugin
+cd $PROJECT_DIR/tutorial/terraform/components/plugin
 
 # 初期化
 terraform init

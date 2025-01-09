@@ -22,11 +22,11 @@ helm uninstall -n kube-system metrics-server
 ## Terraformリソースの削除
 
 ```bash
-terraform -chdir=$PROJECT_DIR/tutorial/terraform/envs/dev/service destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/tutorial/terraform/envs/dev/plugin destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/tutorial/terraform/envs/dev/addon destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/tutorial/terraform/envs/dev/node-group destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/tutorial/terraform/envs/dev/cluster destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/tutorial/terraform/envs/dev/network destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/tutorial/terraform/envs/dev/base destroy -auto-approve
+terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/service destroy -auto-approve && \
+terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/plugin destroy -auto-approve && \
+terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/addon destroy -auto-approve && \
+terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/node-group destroy -auto-approve && \
+terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/cluster destroy -auto-approve && \
+terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/network destroy -auto-approve && \
+terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/base destroy -auto-approve
 ```

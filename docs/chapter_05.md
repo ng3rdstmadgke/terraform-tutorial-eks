@@ -34,7 +34,7 @@ OSにBottlerocketを利用するノードグループを作成するモジュー
 `desired_size` ノードの起動数
 
 
-`terraform/modules/node-group-bottlerocket/variables.tf`
+`terraform/modules/node-group/bottlerocket/variables.tf`
 
 ```tf
 variable cluster_name {}
@@ -79,7 +79,7 @@ EKSのノードとして起動するEC2インスタンスに付与するIAMロ�
 
 参考: [Amazon EKS ノードの IAM ロール](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-node-role.html)
 
-`terraform/modules/node-group-bottlerocket/main.tf`
+`terraform/modules/node-group/bottlerocket/main.tf`
 
 ```tf
 // Amazon EKS ノードの IAM ロール: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-node-role.html#create-worker-node-role
@@ -150,7 +150,7 @@ resource "aws_iam_role_policy_attachment" "amazoneks_cni_ipv6_policy" {
 EKSクラスタのノードとして起動するEC2インスタンスの起動テンプレートを定義します。  
 
 
-`terraform/modules/node-group-bottlerocket/main.tf`
+`terraform/modules/node-group/bottlerocket/main.tf`
 
 ```tf
 resource "aws_launch_template" "node_instance" {
@@ -208,7 +208,7 @@ resource "aws_launch_template" "node_instance" {
 
 ユーザーデータファイル
 
-`terraform/modules/node-group-bottlerocket/user-data.ini`
+`terraform/modules/node-group/bottlerocket/user-data.ini`
 
 ```ini
 [settings]
@@ -222,7 +222,7 @@ cluster-certificate = '${cluster_certificate}'
 
 ノードグループ本体を定義します。
 
-`terraform/modules/node-group-bottlerocket/main.tf`
+`terraform/modules/node-group/bottlerocket/main.tf`
 
 
 ```tf
@@ -280,7 +280,7 @@ resource "aws_eks_node_group" "this" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/node-group/variables.tf`
+`terraform/components/node-group/variables.tf`
 
 ```tf
 locals {
@@ -309,7 +309,7 @@ data terraform_remote_state "cluster" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/node-group/main.tf`
+`terraform/components/node-group/main.tf`
 
 ```tf
 terraform {
@@ -347,7 +347,7 @@ provider "aws" {
 
 先ほど定義した node-group-bottlerocketモジュールを呼び出します。
 
-`terraform/envs/dev/node-group/main.tf`
+`terraform/components/node-group/main.tf`
 
 ```tf
 /**
@@ -373,7 +373,7 @@ module node_group_bottlerocket_1 {
 terraformを実行してノードグループを作成してみましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/envs/dev/node-group
+cd $PROJECT_DIR/tutorial/terraform/components/node-group
 
 # 初期化
 terraform init

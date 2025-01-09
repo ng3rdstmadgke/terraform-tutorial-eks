@@ -28,7 +28,7 @@ EKSクラスタとその関連リソースをモジュールとして、ひと�
 - `subnet_ids` EKSクラスタがノードを立ち上げるサブネット
 - `access_entries` KubernetesのAPIにアクセスできるIAMユーザーもしくはIAMロールのARN
 
-`terraform/modules/cluster/variables.tf`
+`terraform/modules/cluster/eks/variables.tf`
 
 ```tf
 variable cluster_name {}
@@ -56,7 +56,7 @@ locals {
 
 参考: [コントロールプレーンログを CloudWatch Logs に送信する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/control-plane-logs.html)
 
-`terraform/modules/cluster/main.tf`
+`terraform/modules/cluster/eks/main.tf`
 
 ```tf
  /**
@@ -83,7 +83,7 @@ EKSのコントロールプレーンがAWS APIを呼び出すためのIAMロー�
 
 参考: [Amazon EKS クラスター の IAM ロール | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/cluster-iam-role.html)
 
-`terraform/modules/cluster/main.tf`
+`terraform/modules/cluster/eks/main.tf`
 
 ```tf
 /**
@@ -151,7 +151,7 @@ KMSキーはaccess_entriesに設定したIAMユーザー・IAMロールが使用
 
 参考: [既存のクラスターで AWS KMS を使用して Kubernetes シークレットを暗号化する](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/enable-kms.html)
 
-`terraform/modules/cluster/main.tf`
+`terraform/modules/cluster/eks/main.tf`
 
 ```tf
 /**
@@ -242,7 +242,7 @@ resource "aws_kms_alias" "kubernetes_encription" {
 
 EKSクラスタ本体を定義します。 (EKSAutoModeはOFFです)
 
-`terraform/modules/cluster/main.tf`
+`terraform/modules/cluster/eks/main.tf`
 
 ```tf
 /**
@@ -355,7 +355,7 @@ IRSAを行うためのOIDCプロバイダを定義します。
 
 参考: IRSAについて: [EKSの認証・認可の仕組み解説 | Zenn](https://zenn.dev/take4s5i/articles/aws-eks-authentication#iam-roles-for-service-accounts(irsa))
 
-`terraform/modules/cluster/main.tf`
+`terraform/modules/cluster/eks/main.tf`
 
 ```tf
 /**
@@ -378,7 +378,7 @@ resource "aws_iam_openid_connect_provider" "default" {
 
 作成したEKSクラスタを出力値とします。
 
-`terraform/modules/cluster/outputs.tf`
+`terraform/modules/cluster/eks/outputs.tf`
 
 ```tf
 output "eks_cluster" {
@@ -397,7 +397,7 @@ output "eks_cluster" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/cluster/variables.tf`
+`terraform/components/cluster/variables.tf`
 
 ```tf
 // EKSのアクセスエントリに追加するIAMユーザまたはIAMロールのARN
@@ -445,7 +445,7 @@ data "terraform_remote_state" "network" {
 
 AWSマネジメントコンソールにログインするユーザーと、Terraformを実行するロールを設定してください。
 
-`terraform/envs/dev/cluster/secrets.auto.tfvars`
+`terraform/components/cluster/secrets.auto.tfvars`
 
 ```tf
 access_entries = [
@@ -459,7 +459,7 @@ access_entries = [
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/cluster/main.tf`
+`terraform/components/cluster/main.tf`
 
 ```tf
 terraform {
@@ -497,7 +497,7 @@ provider "aws" {
 
 先ほど定義した clusterモジュールを呼び出します。
 
-`terraform/envs/dev/cluster/main.tf`
+`terraform/components/cluster/main.tf`
 
 ```tf
 /**
@@ -521,7 +521,7 @@ module cluster {
 
 参考: [IAM アイデンティティと Kubernetes のアクセス許可を関連付ける](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/grant-k8s-access.html#authentication-modes)
 
-`terraform/envs/dev/cluster/main.tf`
+`terraform/components/cluster/main.tf`
 
 ```tf
 /**
@@ -563,7 +563,7 @@ resource "aws_eks_access_policy_association" "admin" {
 
 他のコンポーネントから参照するための値を出力値として定義します。
 
-`terraform/envs/dev/network/outputs.tf`
+`terraform/components/network/outputs.tf`
 
 ```tf
 output "cluster_name" {
@@ -601,7 +601,7 @@ output "subnet_ids" {
 terraformを実行してEKSを作成してみましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/envs/dev/cluster
+cd $PROJECT_DIR/tutorial/terraform/components/cluster
 
 # 初期化
 terraform init

@@ -26,7 +26,7 @@ ebs-csi-driverアドオンのインストールに必要な付随リソースを
 
 ## モジュールの変数定義
 
-`terraform/modules/ebs-csi-driver/variables.tf`
+`terraform/modules/addon/ebs-csi-driver/variables.tf`
 
 ```tf
 variable cluster_name {}
@@ -36,7 +36,7 @@ variable cluster_name {}
 
 ebs-csi-driverのサービスアカウントが利用するIAMロールを定義します。
 
-`terraform/modules/ebs-csi-driver/main.tf`
+`terraform/modules/addon/ebs-csi-driver/main.tf`
 
 ```tf
 resource "aws_iam_role" "ebs_csi_controller_sa_role" {
@@ -113,7 +113,7 @@ resource "aws_iam_role_policy_attachment" "ebs_csi_driver_encrypt_volume_policy"
 
 作成したIAMロールのARNを出力値として定義します。
 
-`terraform/modules/ebs-csi-driver/outputs.tf`
+`terraform/modules/addon/ebs-csi-driver/outputs.tf`
 
 ```tf
 output role_arn {
@@ -135,7 +135,7 @@ output role_arn {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/addon/variables.tf`
+`terraform/components/addon/variables.tf`
 
 ```tf
 locals {
@@ -159,7 +159,7 @@ data terraform_remote_state "cluster" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/addon/main.tf`
+`terraform/components/addon/main.tf`
 
 ```tf
 terraform {
@@ -208,7 +208,7 @@ aws eks describe-addon-versions \
 ```
 
 
-`terraform/envs/dev/addon/main.tf`
+`terraform/components/addon/main.tf`
 
 
 ```tf
@@ -235,7 +235,7 @@ pod-identityの仕組みを利用する都合上、Pod Identity Agentのイン�
 
 参考: [Amazon EBS で Kubernetes ボリュームを保存する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/ebs-csi.html)
 
-`terraform/envs/dev/addon/main.tf`
+`terraform/components/addon/main.tf`
 
 
 ```tf
@@ -269,7 +269,7 @@ EBS CSI Snapshot Controllerのインストールを定義します。
 参考: [Amazon EKS クラスターでアドオンを活用し、Amazon EBS スナップショットを永続ストレージに使用する: AWS](https://aws.amazon.com/jp/blogs/news/using-amazon-ebs-snapshots-for-persistent-storage-with-your-amazon-eks-cluster-by-leveraging-add-ons/)
 
 
-`terraform/envs/dev/addon/main.tf`
+`terraform/components/addon/main.tf`
 
 
 ```tf
@@ -289,7 +289,7 @@ resource "aws_eks_addon" "snapshot_controller" {
 terraformを実行してアドオンをインストールしましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/envs/dev/addon
+cd $PROJECT_DIR/tutorial/terraform/components/addon
 
 # 初期化
 terraform init

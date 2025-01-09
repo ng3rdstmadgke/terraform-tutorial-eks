@@ -33,7 +33,7 @@ Keycloakのデプロイに必要な周辺AWSリソースの作成と、マニフ
 - `private_subnet_ids` プライベートサブネットID
 - `project_dir` プロジェクトディレクトリ絶対パス
 
-`terraform/modules/keycloak/variables.tf`
+`terraform/modules/service/keycloak/variables.tf`
 
 ```tf
 variable "cluster_name" {}
@@ -66,7 +66,7 @@ data "aws_region" "this" {}
 ポリシーには、SecretsManagerからDBのログイン情報と初期ユーザー情報を取得するための `secretsmanager:GetSecretValue` `secretsmanager:DescribeSecret` 権限を付与します。
 
 
-`terraform/modules/keycloak/main.tf`
+`terraform/modules/service/keycloak/main.tf`
 
 ```tf
 /**
@@ -123,7 +123,7 @@ terraform組み込みの[randomプロバイダ](https://registry.terraform.io/pr
 
 
 
-`terraform/modules/keycloak/main.tf`
+`terraform/modules/service/keycloak/main.tf`
 
 ```tf
 /**
@@ -172,7 +172,7 @@ resource "aws_secretsmanager_secret_version" "keycloak_admin_user" {
 keycloakが利用するデータベースとそのログイン情報を管理するSecretsManagerを定義します。
 
 
-`terraform/modules/keycloak/main.tf`
+`terraform/modules/service/keycloak/main.tf`
 
 ```tf
 /**
@@ -316,7 +316,7 @@ keycloakをKubernetesにapplyするためのマニフェストファイルを動
 生成されたマニフェストファイルは `$PROJECT_DIR/tutorial/service/keycloak/tmp/app.yaml` に出力されます。
 
 
-`terraform/modules/keycloak/main.tf`
+`terraform/modules/service/keycloak/main.tf`
 
 ```tf
 /**
@@ -340,7 +340,7 @@ resource "local_file" "keycloak_manifest" {
 
 マニフェストファイルのテンプレート
 
-`terraform/modules/keycloak/app.yaml`
+`terraform/modules/service/keycloak/app.yaml`
 
 ```yml
 ---
@@ -579,7 +579,7 @@ ServiceコンポーネントはEKS上にデプロイされるアプリケーシ�
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/service/variables.tf`
+`terraform/components/service/variables.tf`
 
 ```tf
 locals {
@@ -645,7 +645,7 @@ data "terraform_remote_state" "plugin" {
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-`terraform/envs/dev/service/main.tf`
+`terraform/components/service/main.tf`
 
 ```tf
 terraform {
@@ -683,7 +683,7 @@ provider "aws" {
 
 先ほど定義した keycloakモジュールを呼び出します。
 
-`terraform/envs/dev/service/main.tf`
+`terraform/components/service/main.tf`
 
 ```tf
 module keycloak {
@@ -703,7 +703,7 @@ module keycloak {
 terraformを実行してチャートのインストールに必要なAWSリソースを作成しましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/envs/dev/service
+cd $PROJECT_DIR/tutorial/terraform/components/service
 
 # 初期化
 terraform init
@@ -718,7 +718,7 @@ terraform apply -auto-approve
 作成し終わったらSecretsManagerに登録された値を確認してみましょう。
 
 ```bash
-CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/tutorial/terraform/envs/dev/base output -raw cluster_name)
+CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/base output -raw cluster_name)
 
 # keycloakのadminユーザーのログイン情報
 aws secretsmanager get-secret-value --secret-id /$CLUSTER_NAME/keycloak | jq -r ".SecretString" | jq
