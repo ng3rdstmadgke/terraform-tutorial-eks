@@ -126,7 +126,7 @@ Terraformは最初にデプロイして終わりではありません。サー�
 コンポーネント同士が循環依存しない
 2. **安定依存の原則(SDP)**  
 安定度の高いコンポーネントに依存する
-3. **安定度・抽象度等価の原則(SAP)**
+3. **安定度・抽象度等価の原則(SAP)**  
 安定度が高いコンポーネントほど抽象化されていなければならない
 
 ### 非循環依存関係の原則(ADP)
@@ -309,7 +309,7 @@ aws s3api create-bucket \
 
 ```
 
-## tfstateロック用のdynamodbテーブルを作成
+## tfstateロック用のDynamoDBテーブルを作成
 
 terraformを複数個所から同時にデプロイできないように、dynamoDBにtfstateをロックするためのテーブルを作成します。
 
@@ -329,17 +329,29 @@ aws dynamodb create-table \
 
 ## tfstate保存先を指定するための変数ファイルを作成
 
-`
+tfstateの保存先バケットとロックのためのDynamoDBテーブルはコンポーネント間で共通なので、共通して利用する変数ファイルに定義します。
+
+
+`terraform/components/tfvars/dev.backend.tfvars`
+
+```ini
+region         = "ap-northeast-1"
+# tfstateの保存先バケット
+bucket         = "terraform-tutorial-eks-tfstate"
+# tfstateのロック情報を管理するDynamoDB
+dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+# tfstateの暗号化
+encrypt = true
+```
 
 ## tfstateとプロバイダの設定
-
-※ `EDIT: ...` コメントの項目を各自編集してください
 
 - `terraform`
   - `required_version`  
   インストールしてあるTerraformのバージョンを指定します。 ( `terraform --version` )
   - `backend`  
-  terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。
+  terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。  
+  設定は terraform init 時に変数ファイル(terraform/components/tfvars/dev.backend.tfvars) で指定するので、ソースコード上は空で問題ありません。
   - `required_providers`  
   利用するプロバイダを指定します。今回は [AWSプロバイダ](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用します。
 - `provider`  
@@ -353,13 +365,6 @@ terraform {
 
   // tfstateファイルをs3で管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3
   backend "s3" {
-    // tfstate保存先のs3バケットとキー
-    bucket = "terraform-tutorial-eks-tfstate"
-    key    = "XXXXX/dev/base/terraform.tfstate"  // EDIT: XXXXX に重複しない任意の値を指定してください
-    region = "ap-northeast-1"
-    encrypt = true
-    // tfstateファイルのロック情報をDynamoDBで管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
-    dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
   }
 
   required_providers {
@@ -372,39 +377,76 @@ terraform {
 }
 ```
 
-## 変数と出力値の定義
+## 変数の定義
 
-※ `EDIT: ...` コメントの項目を各自編集してください
+`terraform/components/base/variables.tf`
+
+```tf
+variable cluster_name {
+  type = string
+}
+```
+
+## 出力値の定義
 
 `terraform/components/base/main.tf`
 
 ```tf
-locals {
-  cluster_name = "tte-XXXXX-dev"  // EDIT: XXXXX に重複しない任意の値を指定してください
-}
-
 output "cluster_name" {
-  value = local.cluster_name
+  value = var.cluster_name
 }
 
 output "project_dir" {
-  value = abspath("${path.module}/../../../..")
+  value = abspath("${path.module}/../../..")
 }
 ```
+
+## baseコンポーネントの入力変数ファイルの作成
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+baseコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+
+`terraform/components/base/tfvars/dev.tfvars`
+
+```ini
+cluster_name = "tte-xxxxx-dev"  # EDIT: 重複しない名前を指定
+```
+
 
 ## terraformデプロイ
 
 terraformを実行してVPCを作成してみましょう
 
 ```bash
-cd $PROJECT_DIR/tutorial/terraform/envs/dev/base
+# クラスタ名
+CLUSTER_NAME=tte-xxxxx-dev
+# tfstateの保存先を定義した変数ファイル
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+# コンポーネント名
+COMPONENT_NAME=base
+# コンポーネントディレクトリ
+COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
+# コンポーネントの入力変数ファイル
+COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
 
 # 初期化
-terraform init
+# -chdir terraformコマンドを実行するディレクトリ
+# -reconfigure tfstateのバックエンド設定を再構成します
+# -backend-config tfstateのバックエンド設定をファイルファイルまたは変数で指定します
+terraform -chdir=$COMPONENT_DIR init \
+  -reconfigure \
+  -backend-config $COMMON_BACKEND_CONFIG \
+  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
 
-# デプロイ内容確認
-terraform plan
+# デプロイ内容の確認
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
 
 # デプロイ
-terraform apply -auto-approve
+# -chdir terraformコマンドを実行するディレクトリ
+# -var-file terraformの入力変数をファイルで指定します
+# -auto-approve terraformデプロイ時の確認プロンプトをスキップします
+terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
 ```

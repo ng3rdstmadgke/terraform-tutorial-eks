@@ -3,6 +3,7 @@ terraform {
 
   // tfstateファイルをs3で管理する: https://developer.hashicorp.com/terraform/language/settings/backends/s3
   backend "s3" {
+    // NOTE: tfstateの保存先情報は terraform init 時に変数ファイル(terraform/components/tfvars/dev.backend.tfvars) で指定します。
   }
 
   required_providers {
