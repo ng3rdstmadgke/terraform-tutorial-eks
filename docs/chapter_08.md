@@ -758,7 +758,7 @@ terraformを実行してチャートのインストールに必要なAWSリソ�
 
 ```bash
 # クラスタ名
-CLUSTER_NAME=クラスタ名
+CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/base output -raw cluster_name)
 # tfstateの保存先を定義した変数ファイル
 COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
 # コンポーネント名
@@ -837,6 +837,8 @@ $ /opt/keycloak/bin/kcadm.sh config credentials \
 
 # sslRequiredを無効化
 $ /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
+
+$ exit
 ```
 
 ALBのドメインを確認してブラウザでアクセスしてみましょう

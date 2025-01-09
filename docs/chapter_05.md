@@ -416,7 +416,7 @@ terraformを実行してEKSを作成してみましょう
 
 ```bash
 # クラスタ名
-CLUSTER_NAME=クラスタ名
+CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/base output -raw cluster_name)
 # tfstateの保存先を定義した変数ファイル
 COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
 # コンポーネント名

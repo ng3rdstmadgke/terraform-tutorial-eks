@@ -298,11 +298,31 @@ helm uninstall -n kube-system metrics-server
 ## Terraformリソースの削除
 
 ```bash
-terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/service destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/plugin destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/addon destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/node-group destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/cluster destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/network destroy -auto-approve && \
-terraform -chdir=$PROJECT_DIR/sample/terraform/envs/dev/base destroy -auto-approve
+CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/sample/terraform/components/base output -raw cluster_name)
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/sample/terraform/components/tfvars/dev.backend.tfvars
+COMPONENTS=("service" "plugin" "addon" "node-group" "cluster" "network" "base")
+SCRIPT_PATH=/tmp/${CLUSTER_NAME}-destroy.sh
+
+# リソースを削除するスクリプトを生成
+cat <<EOF > $SCRIPT_PATH
+#!/bin/bash
+
+set -e
+EOF
+
+for COMPONENT_NAME in ${COMPONENTS[@]}; do
+  COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
+  COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
+  echo terraform -chdir=$COMPONENT_DIR init \
+    -reconfigure \
+    -backend-config $COMMON_BACKEND_CONFIG \
+    -backend-config \"key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate\"
+  echo terraform -chdir=$COMPONENT_DIR destroy -var-file $COMPONENT_TFVARS -auto-approve
+done >> $SCRIPT_PATH
+
+# 生成されたスクリプトの確認
+cat $SCRIPT_PATH
+
+# リソースの削除
+bash $SCRIPT_PATH
 ```
