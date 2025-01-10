@@ -23,7 +23,7 @@ helm uninstall -n kube-system metrics-server
 
 ```bash
 CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/base output -raw cluster_name)
-COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/backend.tfvars
 COMPONENTS=("service" "plugin" "addon" "node-group" "cluster" "network" "base")
 SCRIPT_PATH=/tmp/${CLUSTER_NAME}-destroy.sh
 

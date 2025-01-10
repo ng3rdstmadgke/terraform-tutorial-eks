@@ -341,7 +341,7 @@ aws dynamodb create-table \
 tfstateの保存先バケットとロックのためのDynamoDBテーブルはコンポーネント間で共通なので、共通して利用する変数ファイルに定義します。
 
 
-`terraform/components/tfvars/dev.backend.tfvars`
+`terraform/components/tfvars/backend.tfvars`
 
 ```ini
 region         = "ap-northeast-1"
@@ -360,7 +360,7 @@ encrypt = true
   インストールしてあるTerraformのバージョンを指定します。 ( `terraform --version` )
   - `backend`  
   terraformではリソースを `terraform.tfstate` というファイルで管理しますが、デフォルトだとこのファイルはローカルに生成されてしまうため、s3バケットに保存するように設定します。  
-  設定は terraform init 時に変数ファイル(terraform/components/tfvars/dev.backend.tfvars) で指定するので、ソースコード上は空で問題ありません。
+  設定は terraform init 時に変数ファイル(terraform/components/tfvars/backend.tfvars) で指定するので、ソースコード上は空で問題ありません。
   - `required_providers`  
   利用するプロバイダを指定します。今回は [AWSプロバイダ](https://registry.terraform.io/providers/hashicorp/aws/latest/docs) を利用します。
 - `provider`  
@@ -431,7 +431,7 @@ terraformを実行してVPCを作成してみましょう
 # クラスタ名
 CLUSTER_NAME=クラスタ名
 # tfstateの保存先を定義した変数ファイル
-COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/dev.backend.tfvars
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/backend.tfvars
 # コンポーネント名
 COMPONENT_NAME=base
 # コンポーネントディレクトリ

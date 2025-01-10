@@ -10,7 +10,7 @@ devcontainerに含まれています。
 
 ```bash
 CLUSTER_NAME=tte-mido-dev
-COMMON_BACKEND_CONFIG=$PROJECT_DIR/sample/terraform/components/tfvars/dev.backend.tfvars
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/sample/terraform/components/tfvars/backend.tfvars
 ```
 
 ## ベーススタック
@@ -299,7 +299,7 @@ helm uninstall -n kube-system metrics-server
 
 ```bash
 CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/sample/terraform/components/base output -raw cluster_name)
-COMMON_BACKEND_CONFIG=$PROJECT_DIR/sample/terraform/components/tfvars/dev.backend.tfvars
+COMMON_BACKEND_CONFIG=$PROJECT_DIR/sample/terraform/components/tfvars/backend.tfvars
 COMPONENTS=("service" "plugin" "addon" "node-group" "cluster" "network" "base")
 SCRIPT_PATH=/tmp/${CLUSTER_NAME}-destroy.sh
 
