@@ -1,4 +1,4 @@
-Chapter4 クラスタ作成
+Chapter5 クラスタ作成
 ---
 [READMEに戻る](../README.md)
 
@@ -8,11 +8,11 @@ Chapter4 クラスタ作成
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_04/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_05/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_04/stack.drawio.png">
+<img width="800px" src="drawio/chapter_05/stack.drawio.png">
 
 
 

@@ -1,4 +1,4 @@
-Chapter3 ネットワーク作成
+Chapter4 ネットワーク作成
 ---
 [READMEに戻る](../README.md)
 
@@ -8,11 +8,11 @@ Chapter3 ネットワーク作成
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_03/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_04/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_03/stack.drawio.png">
+<img width="800px" src="drawio/chapter_04/stack.drawio.png">
 
 # ■ 変数定義
 

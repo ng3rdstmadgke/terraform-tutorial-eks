@@ -1,4 +1,4 @@
-Chapter5 ノードグループ作成
+Chapter6 ノードグループ作成
 ---
 [READMEに戻る](../README.md)
 
@@ -8,11 +8,11 @@ Chapter5 ノードグループ作成
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_05/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_06/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_05/stack.drawio.png">
+<img width="800px" src="drawio/chapter_06/stack.drawio.png">
 
 # ■ node-group-bottlerocketモジュール
 

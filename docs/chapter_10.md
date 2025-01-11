@@ -1,4 +1,4 @@
-Chapter9 リソースの削除
+Chapter10 リソースの削除
 ---
 [READMEに戻る](../README.md)
 

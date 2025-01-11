@@ -1,4 +1,4 @@
-Chapter6 アドオンインストール
+Chapter7 アドオンインストール
 ---
 [READMEに戻る](../README.md)
 
@@ -13,11 +13,11 @@ Chapter6 アドオンインストール
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_06/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_07/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_06/stack.drawio.png">
+<img width="800px" src="drawio/chapter_07/stack.drawio.png">
 
 # ■ ebs-csi-driverモジュール
 

@@ -1,4 +1,4 @@
-Chapter7 プラグインインストール
+Chapter8 プラグインインストール
 ---
 [READMEに戻る](../README.md)
 
@@ -17,11 +17,11 @@ Chapter7 プラグインインストール
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_07/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_08/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_07/stack.drawio.png">
+<img width="800px" src="drawio/chapter_08/stack.drawio.png">
 
 # ■ albcモジュール
 
