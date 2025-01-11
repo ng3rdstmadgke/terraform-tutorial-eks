@@ -22,31 +22,16 @@ helm uninstall -n kube-system metrics-server
 ## Terraformリソースの削除
 
 ```bash
-CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/base output -raw cluster_name)
-COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/backend.tfvars
-COMPONENTS=("service" "plugin" "addon" "node-group" "cluster" "network" "base")
-SCRIPT_PATH=/tmp/${CLUSTER_NAME}-destroy.sh
+# プロジェクト名
+PROJECT_NAME=プロジェクト名
+# ステージ名
+STAGE=dev
 
-# リソースを削除するスクリプトを生成
-cat <<EOF > $SCRIPT_PATH
-#!/bin/bash
-
-set -e
-EOF
-
-for COMPONENT_NAME in ${COMPONENTS[@]}; do
-  COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
-  COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-  echo terraform -chdir=$COMPONENT_DIR init \
-    -reconfigure \
-    -backend-config $COMMON_BACKEND_CONFIG \
-    -backend-config \"key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate\"
-  echo terraform -chdir=$COMPONENT_DIR destroy -var-file $COMPONENT_TFVARS -auto-approve
-done >> $SCRIPT_PATH
-
-# 生成されたスクリプトの確認
-cat $SCRIPT_PATH
-
-# リソースの削除
-bash $SCRIPT_PATH
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=service && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=plugin && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=addon && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=node-group && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=cluster && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=network && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=base
 ```

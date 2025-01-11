@@ -404,6 +404,16 @@ output "eks_cluster" {
 `terraform/components/cluster/variables.tf`
 
 ```tf
+variable project_name {
+  type = string
+  description = "プロジェクト名"
+}
+
+variable stage {
+  type = string
+  description = "ステージ名"
+}
+
 variable tfstate_bucket {
   type = string
   description = "tfvarsが保存されているバケット"
@@ -412,16 +422,6 @@ variable tfstate_bucket {
 variable tfstate_region {
   type = string
   description = "tfvarsが保存されているバケットのリージョン"
-}
-
-variable tfstate_base_key {
-  type = string
-  description = "baseコンポーネントのtfstateファイルのパス"
-}
-
-variable tfstate_network_key {
-  type = string
-  description = "networkコンポーネントのtfstateファイルのパス"
 }
 
 variable access_entries {
@@ -441,7 +441,7 @@ data terraform_remote_state "base" {
   config = {
     region = var.tfstate_region
     bucket = var.tfstate_bucket
-    key    = var.tfstate_base_key
+    key    = "${var.project_name}/${var.stage}/base/terraform.tfstate"
   }
 }
 
@@ -454,7 +454,7 @@ data "terraform_remote_state" "network" {
     // https://developer.hashicorp.com/terraform/language/backend/s3
     region = var.tfstate_region
     bucket = var.tfstate_bucket
-    key    = var.tfstate_network_key
+    key    = "${var.project_name}/${var.stage}/network/terraform.tfstate"
   }
 }
 ```
@@ -605,10 +605,6 @@ clusterコンポーネントデプロイ時に入力値と指定する変数をt
 `terraform/components/cluster/tfvars/dev.tfvars`
 
 ```ini
-tfstate_bucket = "terraform-tutorial-eks-tfstate"
-tfstate_region = "ap-northeast-1"
-tfstate_base_key = "クラスタ名/base/terraform.tfstate"  # EDIT: クラスタ名を指定
-tfstate_network_key = "クラスタ名/network/terraform.tfstate"  # EDIT: クラスタ名を指定
 access_entries = [  # EDIT: Kubernetes APIへのアクセス権限を付与していIAMユーザー・ロールを指定
   "arn:aws:iam::xxxxxxxxxxxx:user/xxxxxxxxxxxxxxxx",
 ]
@@ -619,43 +615,30 @@ access_entries = [  # EDIT: Kubernetes APIへのアクセス権限を付与し�
 terraformを実行してEKSを作成してみましょう
 
 ```bash
-# クラスタ名
-CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/tutorial/terraform/components/base output -raw cluster_name)
-# tfstateの保存先を定義した変数ファイル
-COMMON_BACKEND_CONFIG=$PROJECT_DIR/tutorial/terraform/components/tfvars/backend.tfvars
-# コンポーネント名
-COMPONENT_NAME=cluster
-# コンポーネントディレクトリ
-COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/$COMPONENT_NAME
-# コンポーネントの入力変数ファイル
-COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
+# プロジェクト名
+PROJECT_NAME=プロジェクト名
+# ステージ名
+STAGE=dev
+# コンポーネント
+COMPONENT=cluster
 
-# 初期化
-# -chdir terraformコマンドを実行するディレクトリ
-# -reconfigure tfstateのバックエンド設定を再構成します
-# -backend-config tfstateのバックエンド設定をファイルファイルまたは変数で指定します
-terraform -chdir=$COMPONENT_DIR init \
-  -reconfigure \
-  -backend-config $COMMON_BACKEND_CONFIG \
-  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
+# terraform plan: 作成されるリソース、現在との差分の確認
+# 実行後に .tfplan/network/plan.tfgraph ファイルが生成されるのでVSCodeで開いてみましょう。作成されるリソースの詳細を確認することができます。
+make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 
-# デプロイ内容の確認
-# -chdir terraformコマンドを実行するディレクトリ
-# -var-file terraformの入力変数をファイルで指定します
-terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
+# terraform apply: デプロイ
+make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 
-# デプロイ
-# -chdir terraformコマンドを実行するディレクトリ
-# -var-file terraformの入力変数をファイルで指定します
-# -auto-approve terraformデプロイ時の確認プロンプトをスキップします
-terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
+# terraform output: 出力値の確認
+make tf-output PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 ```
 
 # ■ Kubernetesへのアクセス
 
 ```bash
 # ~/.kube/configに作成したEKSクラスタを設定
-CLUSTER_NAME=$(terraform -chdir=$COMPONENT_DIR output -raw cluster_name)
+CLUSTER_COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/cluster
+CLUSTER_NAME=$(terraform -chdir=$CLUSTER_COMPONENT_DIR output -raw cluster_name)
 aws eks update-kubeconfig --name $CLUSTER_NAME
 
 # EKSクラスタを確認

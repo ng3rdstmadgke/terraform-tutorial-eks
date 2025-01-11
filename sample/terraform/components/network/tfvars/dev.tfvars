@@ -1,7 +1,3 @@
-tfstate_bucket = "terraform-tutorial-eks-tfstate"
-tfstate_region = "ap-northeast-1"
-tfstate_base_key = "tte-mido-dev/base/terraform.tfstate"
-
 vpc_cidr = "10.60.0.0/16"
 private_subnets = [
   "10.60.1.0/24",

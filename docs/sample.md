@@ -9,117 +9,60 @@ devcontainerに含まれています。
 # ■ デプロイ
 
 ```bash
-CLUSTER_NAME=tte-mido-dev
-COMMON_BACKEND_CONFIG=$PROJECT_DIR/sample/terraform/components/tfvars/backend.tfvars
+# プロジェクト名
+PROJECT_NAME=tte-mido
+# ステージ名
+STAGE=dev
 ```
 
 ## ベーススタック
 
 
 ```bash
-COMPONENT_NAME=base
-COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
-COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-
-terraform -chdir=$COMPONENT_DIR init \
-  -reconfigure \
-  -backend-config $COMMON_BACKEND_CONFIG \
-  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
-
-terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
-
-terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
+make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=base
+make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=base
 ```
 
 ## ネットワークスタック
 
 ```bash
-COMPONENT_NAME=network
-COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
-COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-
-terraform -chdir=$COMPONENT_DIR init \
-  -reconfigure \
-  -backend-config $COMMON_BACKEND_CONFIG \
-  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
-
-terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
-
-terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
+make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=network
+make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=network
 ```
 
 
 ## EKSクラスタスタック
 
 ```bash
-COMPONENT_NAME=cluster
-COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
-COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-
-terraform -chdir=$COMPONENT_DIR init \
-  -reconfigure \
-  -backend-config $COMMON_BACKEND_CONFIG \
-  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
-
-terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
-
-terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
+make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=cluster
+make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=cluster
 ```
 
 ```bash
-CLUSTER_NAME=$(terraform -chdir=$COMPONENT_DIR output -raw cluster_name)
+CLUSTER_COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/cluster
+CLUSTER_NAME=$(terraform -chdir=$CLUSTER_COMPONENT_DIR output -raw cluster_name)
 aws eks update-kubeconfig --name $CLUSTER_NAME
 ```
 
 ## ノードグループスタック
 
 ```bash
-COMPONENT_NAME=node-group
-COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
-COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-
-terraform -chdir=$COMPONENT_DIR init \
-  -reconfigure \
-  -backend-config $COMMON_BACKEND_CONFIG \
-  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
-
-terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
-
-terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
+make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=node-group
+make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=node-group
 ```
 
 ## アドオンスタック
 
 ```bash
-COMPONENT_NAME=addon
-COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
-COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-
-terraform -chdir=$COMPONENT_DIR init \
-  -reconfigure \
-  -backend-config $COMMON_BACKEND_CONFIG \
-  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
-
-terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
-
-terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
+make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=addon
+make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=addon
 ```
 
 ## プラグインスタック
 
 ```bash
-COMPONENT_NAME=plugin
-COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
-COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-
-terraform -chdir=$COMPONENT_DIR init \
-  -reconfigure \
-  -backend-config $COMMON_BACKEND_CONFIG \
-  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
-
-terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
-
-terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
+make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=plugin
+make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=plugin
 ```
 
 ### metrics-server
@@ -225,18 +168,8 @@ helm upgrade --install secrets-provider-aws aws-secrets-manager/secrets-store-cs
 
 
 ```bash
-COMPONENT_NAME=service
-COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
-COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-
-terraform -chdir=$COMPONENT_DIR init \
-  -reconfigure \
-  -backend-config $COMMON_BACKEND_CONFIG \
-  -backend-config "key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate"
-
-terraform -chdir=$COMPONENT_DIR plan -var-file $COMPONENT_TFVARS
-
-terraform -chdir=$COMPONENT_DIR apply -var-file $COMPONENT_TFVARS -auto-approve
+make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=service
+make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=service
 ```
 
 ```bash
@@ -275,7 +208,7 @@ kubectl -n keycloak get ing
 
 # ログイン情報を確認
 CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/sample/terraform/components/base output -raw cluster_name)
-aws secretsmanager get-secret-value --secret-id /$CLUSTER_NAME/keycloak --query "SecretString" --output text  | jq "."
+aws secretsmanager get-secret-value --secret-id /$CLUSTER_NAME/keycloak --query "SecretString" --output text | jq "."
 ```
 
 # ■ 削除
@@ -298,31 +231,16 @@ helm uninstall -n kube-system metrics-server
 ## Terraformリソースの削除
 
 ```bash
-CLUSTER_NAME=$(terraform -chdir=$PROJECT_DIR/sample/terraform/components/base output -raw cluster_name)
-COMMON_BACKEND_CONFIG=$PROJECT_DIR/sample/terraform/components/tfvars/backend.tfvars
-COMPONENTS=("service" "plugin" "addon" "node-group" "cluster" "network" "base")
-SCRIPT_PATH=/tmp/${CLUSTER_NAME}-destroy.sh
+# プロジェクト名
+PROJECT_NAME=tte-mido
+# ステージ名
+STAGE=dev
 
-# リソースを削除するスクリプトを生成
-cat <<EOF > $SCRIPT_PATH
-#!/bin/bash
-
-set -e
-EOF
-
-for COMPONENT_NAME in ${COMPONENTS[@]}; do
-  COMPONENT_DIR=$PROJECT_DIR/sample/terraform/components/$COMPONENT_NAME
-  COMPONENT_TFVARS=$COMPONENT_DIR/tfvars/dev.tfvars
-  echo terraform -chdir=$COMPONENT_DIR init \
-    -reconfigure \
-    -backend-config $COMMON_BACKEND_CONFIG \
-    -backend-config \"key=$CLUSTER_NAME/$COMPONENT_NAME/terraform.tfstate\"
-  echo terraform -chdir=$COMPONENT_DIR destroy -var-file $COMPONENT_TFVARS -auto-approve
-done >> $SCRIPT_PATH
-
-# 生成されたスクリプトの確認
-cat $SCRIPT_PATH
-
-# リソースの削除
-bash $SCRIPT_PATH
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=service && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=plugin && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=addon && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=node-group && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=cluster && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=network && \
+make tf-destroy PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=base
 ```

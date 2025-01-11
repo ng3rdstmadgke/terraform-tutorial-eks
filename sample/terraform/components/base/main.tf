@@ -16,7 +16,7 @@ terraform {
 }
 
 output "cluster_name" {
-  value = var.cluster_name
+  value = "${var.project_name}-${var.stage}"
 }
 
 output "project_dir" {

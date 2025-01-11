@@ -1,3 +1,13 @@
+variable project_name {
+  type = string
+  description = "プロジェクト名"
+}
+
+variable stage {
+  type = string
+  description = "ステージ名"
+}
+
 variable tfstate_bucket {
   type = string
   description = "tfvarsが保存されているバケット"
@@ -6,21 +16,6 @@ variable tfstate_bucket {
 variable tfstate_region {
   type = string
   description = "tfvarsが保存されているバケットのリージョン"
-}
-
-variable tfstate_base_key {
-  type = string
-  description = "baseコンポーネントのtfstateファイルのパス"
-}
-
-variable tfstate_network_key {
-  type = string
-  description = "networkコンポーネントのtfstateファイルのパス"
-}
-
-variable tfstate_cluster_key {
-  type = string
-  description = "clusterコンポーネントのtfstateファイルのパス"
 }
 
 locals {
@@ -35,7 +30,7 @@ data terraform_remote_state "base" {
   config = {
     region = var.tfstate_region
     bucket = var.tfstate_bucket
-    key    = var.tfstate_base_key
+    key    = "${var.project_name}/${var.stage}/base/terraform.tfstate"
   }
 }
 
@@ -46,7 +41,7 @@ data "terraform_remote_state" "network" {
   config = {
     region = var.tfstate_region
     bucket = var.tfstate_bucket
-    key    = var.tfstate_network_key
+    key    = "${var.project_name}/${var.stage}/network/terraform.tfstate"
   }
 }
 
@@ -56,6 +51,6 @@ data terraform_remote_state "cluster" {
   config = {
     region = var.tfstate_region
     bucket = var.tfstate_bucket
-    key    = var.tfstate_cluster_key
+    key    = "${var.project_name}/${var.stage}/cluster/terraform.tfstate"
   }
 }
