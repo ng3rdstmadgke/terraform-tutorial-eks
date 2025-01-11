@@ -1,88 +1,49 @@
-Chapter7 プラグインインストール
+Chapter6 アドオンインストール
 ---
 [READMEに戻る](../README.md)
 
 # ■ 作るもの
 
-この章ではHelmを利用してEKS以下のチャートをインストールします。  
-インストールするにあたって必要なAWSリソースはpluginコンポーネントに定義していきます。  
+この章では以下のEKSのアドオンをインストールします。
 
-- `aws-load-balancer-controller`
-- `metrics-server`
-- `secrets-store-csi-driver`
-- `secrets-store-csi-driver-provider-aws`
+- `eks-pod-identity-agent`
+- `aws-ebs-csi-driver`
+- `snapshot-controller`
 
-
-チャートのインストールはコマンドラインで行いますが、インストールに必要なAWSリソースはTerraformで定義します。
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_07/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_06/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_07/stack.drawio.png">
+<img width="800px" src="drawio/chapter_06/stack.drawio.png">
 
-# ■ albcモジュール
+# ■ ebs-csi-driverモジュール
 
-`aws-load-balancer-controller` チャートに必要なAWSリソースを定義するモジュールを定義します。
+ebs-csi-driverアドオンのインストールに必要な付随リソースを作成するモジュールを定義します。
+
 
 ## モジュールの変数定義
 
-モジュールを呼び出す際に指定する入力値の定義を行います
-
-- `cluster_name` EKSクラスタ名
-- `vpc_id` ALBに設定するセキュリティグループ
-- `project_dir`
-- `ingress_cidr_blocks`
-
-`terraform/modules/plugin/albc/variables.tf`
+`terraform/modules/addon/ebs-csi-driver/variables.tf`
 
 ```tf
 variable cluster_name {
   type = string
   description = "EKSクラスタ名"
 }
-variable vpc_id {
-  type = string
-  description = "VPC ID"
-}
-variable project_dir {
-  type = string
-  description = "プロジェクトディレクトリの絶対パス"
-}
-variable ingress_cidr_blocks {
-  // ALBへのアクセスを許可するCIDR
-  type = list(string)
-  default = ["0.0.0.0/0"]
-  description = "ALBへのアクセスを許可するCIDR"
-}
-
-locals {
-  namespace = "kube-system"
-  service_account = "aws-load-balancer-controller"
-  app_version = "v2.11.0"
-}
-
 ```
 
-## モジュールのリソース定義
+## モジュールのリソースの定義
 
-### IAMロール
+ebs-csi-driverのサービスアカウントが利用するIAMロールを定義します。
 
-`aws-load-balancer-controller` サービスアカウントに紐づけるIAMロールを定義し、Pod Identityに登録します。  
-必要な権限は `https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json` からダウンロードします。  
-
-参考: [マニフェストを使用して AWS Load Balancer Controller インストールする](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-manifest.html)
-
-`terraform/modules/plugin/albc/main.tf`
+`terraform/modules/addon/ebs-csi-driver/main.tf`
 
 ```tf
-/**
- * AWS Load Balancer ControllerがALBを作成するために必要なRoleを作成
- */
-resource "aws_iam_role" "albc" {
-  name = "${var.cluster_name}-EKSIngressAWSLoadBalancerControllerRole"
+resource "aws_iam_role" "ebs_csi_controller_sa_role" {
+  name = "${var.cluster_name}-EbsCsiControllerSaRole"
   assume_role_policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
@@ -101,146 +62,81 @@ resource "aws_iam_role" "albc" {
   })
 }
 
-data "http" "albc" {
-  // https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http
-
-  url = "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json"
-  request_headers = {
-    Accept = "application/json"
-  }
+resource "aws_iam_role_policy_attachment" "managed_policies" {
+  for_each = toset([
+    "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
+  ])
+  role = aws_iam_role.ebs_csi_controller_sa_role.name
+  policy_arn = each.key
 }
 
-resource "aws_iam_policy" "albc" {
-  name   = "${var.cluster_name}-AwsLoadBalancerControllerPolicy"
-  policy = data.http.albc.response_body
-}
-
-resource "aws_iam_role_policy_attachment" "albc" {
-  role = aws_iam_role.albc.name
-  policy_arn = aws_iam_policy.albc.arn
-}
-
-resource "aws_eks_pod_identity_association" "albc" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_pod_identity_association
-
-  cluster_name    = var.cluster_name
-  namespace       = local.namespace
-  service_account = local.service_account
-  role_arn        = aws_iam_role.albc.arn
-}
-```
-
-### セキュリティグループ
-
-ALBに紐づけるセキュリティグループを定義します。
-
-
-`terraform/modules/plugin/albc/main.tf`
-
-```tf
-/**
- * ALB のセキュリティグループ
- */
-resource "aws_security_group" "alb_ingress" {
-  name        = "${var.cluster_name}-AlbIngres"
-  description = "Allow HTTP, HTTPS access."
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description = "Allow HTTP access."
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = var.ingress_cidr_blocks
-  }
-
-  ingress {
-    description = "Allow HTTPS access."
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = var.ingress_cidr_blocks
-  }
-
-  egress {
-    from_port        = 0
-    to_port          = 0
-    protocol         = "-1"
-    cidr_blocks      = ["0.0.0.0/0"]
-    ipv6_cidr_blocks = ["::/0"]
-  }
-
-  tags = {
-    Name = "${var.cluster_name}-AlbIngres"
-  }
-}
-```
-
-### values.yaml
-
-Helmでalbcをインストールする際に指定するvalues.yamlファイルを動的に生成します。
-
-`terraform/modules/plugin/albc/main.tf`
-
-```tf
-/**
- * ALBCをHelmでインストールするためのvalues.yaml
- */
-resource "local_file" "albc_values" {
-  filename = "${var.project_dir}/plugin/albc/tmp/values.yaml"
-  content = templatefile(
-    "${path.module}/values.yaml",
+resource "aws_iam_policy" "ebs_csi_driver_encrypt_volume_policy" {
+  name = "${var.cluster_name}-EbsCsiDriverEncryptVolumePolicy"
+  policy = jsonencode(
     {
-      cluster_name = var.cluster_name
-      service_account = local.service_account
-      security_group_id = aws_security_group.alb_ingress.id
-      role_arn = aws_iam_role.albc.arn
-      image_tag = local.app_version
-      vpc_id = var.vpc_id
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "kms:CreateGrant",
+            "kms:ListGrants",
+            "kms:RevokeGrant"
+          ],
+          "Resource": ["*"],
+          "Condition": {
+            "Bool": {
+              "kms:GrantIsForAWSResource": "true"
+            }
+          }
+        },
+        {
+          "Effect": "Allow",
+          "Action": [
+            "kms:Encrypt",
+            "kms:Decrypt",
+            "kms:ReEncrypt*",
+            "kms:GenerateDataKey*",
+            "kms:DescribeKey"
+          ],
+          "Resource": ["*"]
+        }
+      ]
     }
   )
 }
-```
 
-values.yamlのテンプレートファイル
-
-`terraform/modules/plugin/albc/values.yaml`
-
-```yml
-clusterName: ${cluster_name}
-serviceAccount:
-  create: true
-  name: ${service_account}
-  annotations:
-    eks.amazonaws.com/role-arn: ${role_arn}
-image:
-  repository: public.ecr.aws/eks/aws-load-balancer-controller
-  tag: ${image_tag}
-region: ap-northeast-1
-vpcId: ${vpc_id}
+resource "aws_iam_role_policy_attachment" "ebs_csi_driver_encrypt_volume_policy" {
+  role = aws_iam_role.ebs_csi_controller_sa_role.name
+  policy_arn = aws_iam_policy.ebs_csi_driver_encrypt_volume_policy.arn
+}
 ```
 
 ## モジュールの出力値の定義
 
-`terraform/modules/plugin/albc/outputs.tf`
+作成したIAMロールのARNを出力値として定義します。
+
+`terraform/modules/addon/ebs-csi-driver/outputs.tf`
 
 ```tf
-output "alb_ingress_sg" {
-  value = aws_security_group.alb_ingress.id
+output role_arn {
+  value = aws_iam_role.ebs_csi_controller_sa_role.arn
 }
 ```
 
 
+# ■ addonコンポーネント
 
-# ■ pluginコンポーネント
+以下のアドオンをインストールします。
 
-ServiceコンポーネントはKubernetesのプラグインのインストールに必要なAWSリソースを定義するためのコンポーネントです。
+- `eks-pod-identity-agent`
+- `aws-ebs-csi-driver`
+- `snapshot-controller`
+
 
 ## 変数定義
 
-必要な変数はbase, network, clusterコンポーネントから参照します。
-
-`terraform/components/plugin/variables.tf`
+`terraform/components/addon/variables.tf`
 
 ```tf
 variable project_name {
@@ -264,30 +160,7 @@ variable tfstate_region {
 }
 
 locals {
-  project_dir = data.terraform_remote_state.base.outputs.project_dir
   cluster_name = data.terraform_remote_state.cluster.outputs.cluster_name
-  vpc_id = data.terraform_remote_state.network.outputs.vpc_id
-}
-
-data terraform_remote_state "base" {
-  backend = "s3"
-
-  config = {
-    region = var.tfstate_region
-    bucket = var.tfstate_bucket
-    key    = "${var.project_name}/${var.stage}/base/terraform.tfstate"
-  }
-}
-
-data "terraform_remote_state" "network" {
-  // https://developer.hashicorp.com/terraform/language/state/remote-state-data#argument-reference
-  backend = "s3"
-
-  config = {
-    region = var.tfstate_region
-    bucket = var.tfstate_bucket
-    key    = "${var.project_name}/${var.stage}/network/terraform.tfstate"
-  }
 }
 
 data terraform_remote_state "cluster" {
@@ -304,13 +177,15 @@ data terraform_remote_state "cluster" {
 
 ## tfstateとプロバイダの設定
 
-`terraform/components/plugin/main.tf`
+`terraform/components/addon/main.tf`
 
 ```tf
 terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
+    region = "ap-northeast-1"
+    encrypt = true
   }
 
   required_providers {
@@ -333,41 +208,119 @@ provider "aws" {
 }
 ```
 
-## albcモジュールの呼び出し
+## Pod Identity Agent
 
-先ほど定義した albcモジュールを呼び出します。
+Pod Identity Agentのインストールを定義します。
 
-`terraform/components/plugin/main.tf`
+参考: [Amazon EKS Pod Identity エージェントのセットアップ | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/pod-id-agent-setup.html)
+
+最新バージョンは下記コマンドで確認します。
+
+```bash
+aws eks describe-addon-versions \
+  --addon-name eks-pod-identity-agent \
+  --query "addons[0].addonVersions[].addonVersion"
+```
+
+
+`terraform/components/addon/main.tf`
+
 
 ```tf
-module albc {
-  source = "../../modules/plugin/albc"
+/**
+ * Pod Identity Agent
+ */
+resource "aws_eks_addon" "eks_pod_identity_agent" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon
+
   cluster_name = local.cluster_name
-  vpc_id = local.vpc_id
-  project_dir = local.project_dir
+  addon_name   = "eks-pod-identity-agent"
+  // バージョンの確認: aws eks describe-addon-versions --addon-name eks-pod-identity-agent
+  addon_version = "v1.3.4-eksbuild.1"
 }
 ```
 
-## 出力値の定義
+## EBS CSI Driver
 
-`terraform/components/plugin/main.tf`
+EBS CSI Driverのインストールを定義します。  
+ebs-csi-driverモジュールを呼び出してIAMロールを作成し、pod-identityの仕組みでサービスアカウントにIAMロールを紐づけます。  
+pod-identityの仕組みを利用する都合上、Pod Identity Agentのインストール後にインストールしなければならないので、depends_onに `aws_eks_addon.eks_pod_identity_agent` を設定します。
+
+参考: [Amazon EBS で Kubernetes ボリュームを保存する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/ebs-csi.html)
+
+最新バージョンは下記コマンドで確認します。
+
+```bash
+aws eks describe-addon-versions \
+  --addon-name aws-ebs-csi-driver \
+  --query "addons[0].addonVersions[].addonVersion"
+```
+
+`terraform/components/addon/main.tf`
+
 
 ```tf
-output "alb_ingress_sg" {
-  value = module.albc.alb_ingress_sg
+/**
+ * EBS CSI Driver
+ */
+module ebs_csi_driver {
+  source = "../../modules/addon/ebs-csi-driver"
+  cluster_name = local.cluster_name
+}
+
+resource "aws_eks_addon" "aws_ebs_csi_driver" {
+  cluster_name  = local.cluster_name
+  addon_name    = "aws-ebs-csi-driver"
+  // バージョンの確認: aws eks describe-addon-versions --addon-name aws-ebs-csi-driver
+  addon_version = "v1.37.0-eksbuild.1"
+  // Pod Identity に kube-system.ebs-csi-controller-sa に紐づけるIAMロールを指定
+  pod_identity_association {
+    role_arn = module.ebs_csi_driver.role_arn
+    service_account = "ebs-csi-controller-sa"
+  }
+
+  depends_on = [ aws_eks_addon.eks_pod_identity_agent ]
 }
 ```
 
-# ■ plugin コンポーネントの入力変数ファイルの作成
+## EBS CSI Snapshot Controller
+
+EBS CSI Snapshot Controllerのインストールを定義します。  
+
+参考: [Amazon EKS クラスターでアドオンを活用し、Amazon EBS スナップショットを永続ストレージに使用する: AWS](https://aws.amazon.com/jp/blogs/news/using-amazon-ebs-snapshots-for-persistent-storage-with-your-amazon-eks-cluster-by-leveraging-add-ons/)
+
+最新バージョンは下記コマンドで確認します。
+
+```bash
+aws eks describe-addon-versions \
+  --addon-name snapshot-controller \
+  --query "addons[0].addonVersions[].addonVersion"
+```
+
+`terraform/components/addon/main.tf`
+
+
+```tf
+/**
+ * EBS CSI Snapshot Controller
+ */
+resource "aws_eks_addon" "snapshot_controller" {
+  cluster_name  = local.cluster_name
+  addon_name    = "snapshot-controller"
+  // バージョンの確認: aws eks describe-addon-versions --addon-name snapshot-controller
+  addon_version = "v8.1.0-eksbuild.2"
+}
+```
+
+# ■ addon コンポーネントの入力変数ファイルの作成
 
 共通変数(`terraform/components/tfvars/common.tfvars`)しか利用しないので、空のままでOK
 
-`terraform/components/plugin/tfvars/dev.tfvars`
-
+`terraform/components/addon/tfvars/dev.tfvars`
 
 # ■ terraformデプロイ
 
-terraformを実行してチャートのインストールに必要なAWSリソースを作成しましょう
+terraformを実行してアドオンをインストールしましょう
 
 ```bash
 # プロジェクト名
@@ -375,7 +328,7 @@ PROJECT_NAME=プロジェクト名
 # ステージ名
 STAGE=dev
 # コンポーネント
-COMPONENT=plugin
+COMPONENT=addon
 
 # terraform plan: 作成されるリソース、現在との差分の確認
 # 実行後に .tfplan/network/plan.tfgraph ファイルが生成されるのでVSCodeで開いてみましょう。作成されるリソースの詳細を確認することができます。
@@ -387,122 +340,3 @@ make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 # terraform output: 出力値の確認
 make tf-output PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 ```
-
-# ■ aws-load-balancer-controller のインストール
-
-AWS Load Balancer ControllerはKubernetesクラスタがELBを管理するためのコントローラで、IngressリソースでALBをプロビジョニングすることができます。
-
-Terraformで生成したvalues.yamlを指定してチャートをインストールします。
-
-- [Install AWS Load Balancer Controller with Helm](https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html)
-- [AWS Load Balancer Controller v2.11.0](https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.11/)
-- [kubernetes-sigs/aws-load-balancer-controller | GitHub](https://github.com/kubernetes-sigs/aws-load-balancer-controller)
-
-```bash
-# リポジトリ追加
-helm repo add eks https://aws.github.io/eks-charts
-
-# リポジトリのアップデート
-helm repo update eks
-
-# チャートの最新バージョンチェック
-# CHART_VERSION=$(helm show chart eks/aws-load-balancer-controller | yq -r ".version")
-# echo $CHART_VERSION
-
-# インストール
-helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
-  --version "1.11.0" \
-  --namespace "kube-system" \
-  --create-namespace \
-  --values $PROJECT_DIR/tutorial/plugin/albc/tmp/values.yaml
-```
-
-# ■ metrics-server のインストール
-
-metrics-serverはEKSでHorizontal Pod Autoscaler (Podの水平スケーリング)を利用するために必要なチャートです。
-
-- [Horizontal Pod Autoscaler を使用してポッドデプロイをスケールする | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/horizontal-pod-autoscaler.html)
-- [kubernetes-sigs/metrics-server | GitHub](https://github.com/kubernetes-sigs/metrics-server)
-- [metrics-server - Helm Chart | ArtifactHUB](https://artifacthub.io/packages/helm/metrics-server/metrics-server)
-
-```bash
-# リポジトリ追加
-helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
-
-# リポジトリのアップデート
-helm repo update metrics-server
-
-# チャートの最新バージョンチェック
-# CHART_VERSION=$(helm show chart metrics-server/metrics-server | yq -r ".version")
-# echo $CHART_VERSION
-
-
-# インストール
-helm upgrade --install metrics-server metrics-server/metrics-server \
-  --version "3.12.2" \
-  --namespace "kube-system" \
-  --create-namespace
-```
-
-# ■ secrets-store-csi-driver と secrets-store-csi-driver-provider-aws のインストール
-
-secrets-store-csi-driver と secrets-store-csi-driver-provider-aws はEKSでSecretsManagerに保存されているシークレットを利用するために必要なチャートです。
-
-## Secrets Store CSI Driver
-
-- [Kubernetes Secrets Store CSI Driver](https://secrets-store-csi-driver.sigs.k8s.io/)
-- [Amazon Elastic Kubernetes Service で AWS Secrets Manager シークレットを使用する](https://docs.aws.amazon.com/ja_jp/secretsmanager/latest/userguide/integrating_csi_driver.html)
-
-
-```bash
-# リポジトリ追加
-helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
-
-# リポジトリのアップデート
-helm repo update
-
-# チャートの最新バージョンのチェック
-# CHART_VERSION=$(helm show chart secrets-store-csi-driver/secrets-store-csi-driver | yq -r ".version")
-# echo $CHART_VERSION
-
-# インストール
-helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
-  --version "1.4.7" \
-  --namespace kube-system \
-  --create-namespace \
-  --set "syncSecret.enabled=true" \
-  --set "enableSecretRotation=true"
-```
-
-## ASCP (aws secrets store csi provider)
-
-- [secrets-store-csi-driver-provider-aws | GitHub](https://github.com/aws/secrets-store-csi-driver-provider-aws)
-- [Amazon Elastic Kubernetes Service で AWS Secrets Manager シークレットを使用する](https://docs.aws.amazon.com/ja_jp/secretsmanager/latest/userguide/integrating_csi_driver.html)
-
-
-```bash
-# リポジトリ追加
-helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
-
-# リポジトリのアップデート
-helm repo update
-
-# チャートの最新バージョンのチェック
-# CHART_VERSION=$(helm show chart aws-secrets-manager/secrets-store-csi-driver-provider-aws | yq -r ".version")
-# echo $CHART_VERSION
-
-# インストール
-helm upgrade --install secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
-  --version "0.3.10" \
-  --namespace kube-system \
-  --create-namespace
-```
-
-# ■ 確認
-
-k9sで以下を確認します
-
-- kube-systemネームスペースのdeploymentに `aws-load-balancer-controller` が存在する
-- kube-systemネームスペースのdeploymentに `metrics-server` が存在する
-- kube-systemネームスペースのdaemonsetに `csi-secrets-store-secrets-store-csi-driver` `secrets-provider-aws-secrets-store-csi-driver-provider-aws` が存在する
-- aws-load-balancer-controllerサービスアカウントのAnnotationsに ` eks.amazonaws.com/role-arn: arn:aws:iam::111111111111:role/xxxxx-dev-EKSIngressAWSLoadBalancerControllerRole` が設定されている

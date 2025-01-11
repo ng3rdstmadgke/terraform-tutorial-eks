@@ -1,308 +1,407 @@
-Chapter5 ノードグループ作成
+Chapter4 クラスタ作成
 ---
 [READMEに戻る](../README.md)
 
 # ■ 作るもの
 
-この章ではEKSのノードグループを作成します。
+この章ではEKSクラスタを作成します。
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_05/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_04/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_05/stack.drawio.png">
+<img width="800px" src="drawio/chapter_04/stack.drawio.png">
 
-# ■ node-group-bottlerocketモジュール
 
-OSにBottlerocketを利用するノードグループを作成するモジュールを定義します。
+
+# ■ clusterモジュールの定義
+
+EKSクラスタとその関連リソースをモジュールとして、ひとまとめで定義します。
 
 ## モジュールの変数定義
 
 モジュールを呼び出す際に指定する入力値の定義を行います
 
-`cluster_name` EKSクラスタ名
-`cluster_version` EKSクラスタのバージョン
-`cluster_security_group_id` EKSクラスタセキュリティグループ
-`cluster_api_endpoint` EKSクラスタのAPIエンドポイント
-`cluster_certificate` EKSクラスタとの通信に必要なBase64エンコードされた証明書
-`cluster_subnet_ids` EKSクラスタのサブネット
-`node_group_name` 任意のノードグループ名
-`ami_type` ノードのAMI。 `BOTTLEROCKET_ARM_64` `BOTTLEROCKET_x86_64` `BOTTLEROCKET_ARM_64_NVIDIA` `BOTTLEROCKET_x86_64_NVIDIA` から選択。
-`instance_types` ノードのインスタンスタイプ
-`desired_size` ノードの起動数
+- `cluster_name` クラスタ名
+- `subnet_ids` EKSクラスタがノードを立ち上げるサブネット
+- `access_entries` KubernetesのAPIにアクセスできるIAMユーザーもしくはIAMロールのARN
 
-
-`terraform/modules/node-group/bottlerocket/variables.tf`
+`terraform/modules/cluster/eks/variables.tf`
 
 ```tf
 variable cluster_name {
   type = string
   description = "EKSクラスタ名"
 }
-variable cluster_version {
-  type = string
-  description = "Kubernetesバージョン"
-}
-variable cluster_security_group_id {
-  type = string
-  description = "EKSクラスタのクラスタセキュリティグループID"
-}
-variable cluster_api_endpoint {
-  type = string
-  description = "EKSクラスタのAPIエンドポイント"
-}
-variable cluster_certificate {
-  type = string
-  description = "EKSクラスタの証明書"
-}
-variable cluster_subnet_ids {
+variable subnet_ids {
   type = list(string)
-  description = "EKSクラスタのサブネットID"
+  description = "EKSクラスタを作成するサブネットID"
 }
-variable node_group_name {
-  type = string
-  description = "ノードグループ名"
-}
-variable ami_type {
-  type = string
-  description = "ノードのAMIタイプ"
-  validation {
-    condition = contains([
-      "BOTTLEROCKET_ARM_64",
-      "BOTTLEROCKET_x86_64",
-      "BOTTLEROCKET_ARM_64_NVIDIA",
-      "BOTTLEROCKET_x86_64_NVIDIA",
-    ], var.ami_type)
-    error_message = "Invalid AMI type. Please specify one of the following: BOTTLEROCKET_ARM_64, BOTTLEROCKET_x86_64, BOTTLEROCKET_ARM_64_NVIDIA, BOTTLEROCKET_x86_64_NVIDIA"
-  }
-}
-variable instance_types {
+variable access_entries {
   type = list(string)
-  description = "ノードのインスタンスタイプ"
-  default = ["m6a.large"]
-}
-variable desired_size {
-  type = number
-  description = "起動するノード数"
-  default = 1
+  description = "EKSのIAMアクセスエントリに登録するIAMユーザまたはIAMロールのARN"
 }
 
-data "aws_eks_cluster" "this" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster
-  name = var.cluster_name
+data "aws_caller_identity" "self" { }
+
+locals {
+  account_id = data.aws_caller_identity.self.account_id
 }
 ```
 
-## モジュールのリソースの定義
+## モジュールのリソース
 
-### ノードロール
+### ロググループ
 
-EKSのノードとして起動するEC2インスタンスに付与するIAMロールの定義します。
+コントロールプレーンログを保持するロググループを定義します。  
+ロググループ名は `/aws/eks/クラスタ名/cluster` で固定で、あらかじめ作っておかないと自動作成されてしまうので明示的に定義しておきます。
 
-参考: [Amazon EKS ノードの IAM ロール](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-node-role.html)
+参考: [コントロールプレーンログを CloudWatch Logs に送信する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/control-plane-logs.html)
 
-`terraform/modules/node-group/bottlerocket/main.tf`
+`terraform/modules/cluster/eks/main.tf`
 
 ```tf
-// Amazon EKS ノードの IAM ロール: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-node-role.html#create-worker-node-role
-resource "aws_iam_role" "eks_node_role" {
-  name = "${var.cluster_name}-${var.node_group_name}-EKSNodeRole"
+ /**
+  * コントロールプレーンのログを保存するロググループ
+  *
+  * ロググループ名は /aws/eks/{MY_CLUSTER}/cluster で固定
+  * 参考: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/control-plane-logs.html
+  *
+  */
+resource "aws_cloudwatch_log_group" "eks_control_plane" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_log_group
+
+  name = "/aws/eks/${var.cluster_name}/cluster"
+
+  // ログの保持期間
+  retention_in_days = 30
+
+  tags = {
+    Name = "/aws/eks/${var.cluster_name}/cluster"
+  }
+}
+```
+
+### クラスタロール
+
+EKSのコントロールプレーンがAWS APIを呼び出すためのIAMロール。ノード管理などで利用されます。
+
+参考: [Amazon EKS クラスター の IAM ロール | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/cluster-iam-role.html)
+
+`terraform/modules/cluster/eks/main.tf`
+
+```tf
+/**
+ * クラスターロール
+ */
+resource "aws_iam_role" "cluster_role" {
+  name = "${var.cluster_name}-EKSClusterRole"
   assume_role_policy = jsonencode({
-    "Version": "2012-10-17",
-    "Statement": [
+    Version   = "2012-10-17"
+    Statement = [
       {
-        "Effect": "Allow",
-        "Principal": {
-          "Service": "ec2.amazonaws.com"
-        },
-        "Action": "sts:AssumeRole"
+        Sid       = "EKSClusterAssumeRole"
+        Action    = [ "sts:TagSession", "sts:AssumeRole" ]
+        Effect    = "Allow"
+        Principal = { Service = "eks.amazonaws.com" }
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "eks_node_policy" {
+// aws管理ポリシー
+resource "aws_iam_role_policy_attachment" "aws_managed_policy" {
   for_each = toset([
-    "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+    "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSComputePolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSVPCResourceController",
   ])
-  role = aws_iam_role.eks_node_role.name
+  role = aws_iam_role.cluster_role.name
   policy_arn = each.key
 }
 
-resource "aws_iam_policy" "amazoneks_cni_ipv6_policy" {
-  name = "${var.cluster_name}-${var.node_group_name}-AmazonEKS_CNI_IPv6_Policy"
+
+// etcdに保存されたKubernetesシークレットの暗号化に利用するKMSの操作権限
+resource "aws_iam_policy" "secret_encription_policy" {
+  name = "${var.cluster_name}-SecretEncriptionPolicy"
   policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
       {
         "Effect": "Allow",
         "Action": [
-          "ec2:AssignIpv6Addresses",
-          "ec2:DescribeInstances",
-          "ec2:DescribeTags",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DescribeInstanceTypes"
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ListGrants",
+          "kms:DescribeKey"
         ],
-        "Resource": "*"
-      },
-      {
-        "Effect": "Allow",
-        "Action": [
-          "ec2:CreateTags"
-        ],
-        "Resource": [
-          "arn:aws:ec2:*:*:network-interface/*"
-        ]
+        "Resource": aws_kms_key.kubernetes_encription.arn,
       }
     ]
   })
 }
-
-resource "aws_iam_role_policy_attachment" "amazoneks_cni_ipv6_policy" {
-  role = aws_iam_role.eks_node_role.name
-  policy_arn = aws_iam_policy.amazoneks_cni_ipv6_policy.arn
+resource "aws_iam_role_policy_attachment" "secret_encription_policy" {
+  role = aws_iam_role.cluster_role.name
+  policy_arn = aws_iam_policy.secret_encription_policy.arn
 }
 ```
 
-### 起動テンプレート
+### KMSキー
 
-EKSクラスタのノードとして起動するEC2インスタンスの起動テンプレートを定義します。  
+Kubernetesのシークレットリソースの暗号化を行うためのKMSキーを定義します。  
+KMSキーはaccess_entriesに設定したIAMユーザー・IAMロールが使用できる必要があります。
 
+参考: [既存のクラスターで AWS KMS を使用して Kubernetes シークレットを暗号化する](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/enable-kms.html)
 
-`terraform/modules/node-group/bottlerocket/main.tf`
+`terraform/modules/cluster/eks/main.tf`
 
 ```tf
-resource "aws_launch_template" "node_instance" {
-  // 起動テンプレート: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template
+/**
+ * Kubernetesのリソースを暗号化するためのKMSキー
+ */
+resource "aws_kms_key" "kubernetes_encription" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key
 
-  name = "${var.cluster_name}-${var.node_group_name}-EKSNodeLaunchTemplate"
-
-  vpc_security_group_ids = [
-    var.cluster_security_group_id,
-  ]
-
-  block_device_mappings {
-    device_name = "/dev/xvda"
-    ebs {
-      volume_size = 4
-      volume_type = "gp3"
-      encrypted = true
-      delete_on_termination = true
-    }
-  }
-  block_device_mappings {
-    device_name = "/dev/xvdb"
-    ebs {
-      volume_size = 64
-      volume_type = "gp3"
-      encrypted = true
-      delete_on_termination = true
-    }
-  }
-
-  monitoring {
-    enabled = true
-  }
-
-  tag_specifications {
-    resource_type = "instance"
-
-    tags = {
-      Name = "${var.cluster_name}-${var.node_group_name}"
-    }
-  }
-
-  // base64エンコードされたユーザーデータを指定
-  // Bottlerocket Settings Reference: https://bottlerocket.dev/en/os/1.26.x/api/settings/
-  user_data = base64encode(templatefile(
-    "${path.module}/user-data.ini",
+  description = "${var.cluster_name} cluster encryption key"
+  is_enabled = true
+  key_usage = "ENCRYPT_DECRYPT"
+  multi_region = false
+  // キーローテーションの設定
+  enable_key_rotation = true
+  rotation_period_in_days = 365
+  // 暗号化と復号化を行うため対象キーでなければならない
+  // キー仕様リファレンス: https://docs.aws.amazon.com/ja_jp/kms/latest/developerguide/symm-asymm-choose-key-spec.html
+  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  policy = jsonencode(
     {
-      cluster_name = var.cluster_name
-      api_server = var.cluster_api_endpoint
-      cluster_certificate =  var.cluster_certificate
+      Statement = [
+        {
+          Sid     = "Default"
+          Effect  = "Allow"
+          Principal = {
+            AWS = "arn:aws:iam::${local.account_id}:root"
+          }
+          Action  = "kms:*"
+          Resource  = "*"
+        },
+        {
+          Sid     = "KeyAdministration"
+          Effect  = "Allow"
+          Principal = {
+            AWS = var.access_entries
+          }
+          Action  = [
+            "kms:Update*",
+            "kms:UntagResource",
+            "kms:TagResource",
+            "kms:ScheduleKeyDeletion",
+            "kms:Revoke*",
+            "kms:ReplicateKey",
+            "kms:Put*",
+            "kms:List*",
+            "kms:ImportKeyMaterial",
+            "kms:Get*",
+            "kms:Enable*",
+            "kms:Disable*",
+            "kms:Describe*",
+            "kms:Delete*",
+            "kms:Create*",
+            "kms:CancelKeyDeletion",
+          ]
+          Resource  = "*"
+        },
+        {
+          Sid     = "KeyUsage"
+          Effect  = "Allow"
+          Principal = {
+            AWS = aws_iam_role.cluster_role.arn
+          }
+          Action  = [
+            "kms:ReEncrypt*",
+            "kms:GenerateDataKey*",
+            "kms:Encrypt",
+            "kms:DescribeKey",
+            "kms:Decrypt",
+          ]
+          Resource  = "*"
+        },
+      ]
+      Version   = "2012-10-17"
     }
-  ))
+  )
+}
+
+resource "aws_kms_alias" "kubernetes_encription" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias
+
+  name = "alias/eks/${var.cluster_name}"
+  target_key_id = aws_kms_key.kubernetes_encription.key_id
 }
 ```
 
-ユーザーデータファイル
+### EKSクラスタ
 
-`terraform/modules/node-group/bottlerocket/user-data.ini`
+EKSクラスタ本体を定義します。 (EKSAutoModeはOFFです)
 
-```ini
-[settings]
-[settings.kubernetes]
-cluster-name = '${cluster_name}'
-api-server = '${api_server}'
-cluster-certificate = '${cluster_certificate}'
-```
-
-### ノードグループ
-
-ノードグループ本体を定義します。
-
-`terraform/modules/node-group/bottlerocket/main.tf`
-
+`terraform/modules/cluster/eks/main.tf`
 
 ```tf
-resource "aws_eks_node_group" "this" {
-  // ノードグループ: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_node_group
+/**
+ * EKSクラスタ
+ *
+ * NOTE:
+ * EKS Auto Mode 利用時は以下の3つの設定がすべて true でなければならない。逆に無効にする場合はすべて false でなければならない
+ * - compute_config.enabled
+ * - storage_config.block_storage.enabled
+ * - kubernetes_network_config.elastic_load_balancing.enabled
+ */
+resource "aws_eks_cluster" "this" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_cluster
 
-  node_group_name = var.node_group_name
-  // EKSクラスタ名
-  cluster_name    = var.cluster_name
-  // Kubernetesバージョン
-  version         = var.cluster_version
-  // ノードに付与するロール
-  node_role_arn   = aws_iam_role.eks_node_role.arn
-  // ノードを配置するサブネット
-  subnet_ids      = var.cluster_subnet_ids
-  // キャパシティタイプ(SPOT, ON_DEMAND)
-  capacity_type = "SPOT"  // スポット料金表: https://aws.amazon.com/jp/ec2/spot/pricing/
-  // インスタンスタイプ
-  instance_types = var.instance_types
-  // AMI: https://docs.aws.amazon.com/ja_jp/eks/latest/APIReference/API_Nodegroup.html#AmazonEKS-Type-Nodegroup-amiType
-  ami_type = var.ami_type
+  name = var.cluster_name
 
-  scaling_config {
-    desired_size = var.desired_size
-    max_size     = 10
-    min_size     = 1
+  role_arn = aws_iam_role.cluster_role.arn
+
+  access_config {
+    authentication_mode = "API_AND_CONFIG_MAP"
+    // TerraformをデプロイしたRoleにkubernetesAPIへのアクセス権を付与する
+    bootstrap_cluster_creator_admin_permissions = true
   }
 
-  // 起動テンプレートの指定
-  launch_template {
-    id = aws_launch_template.node_instance.id
-    version = aws_launch_template.node_instance.latest_version
+  vpc_config {
+    // EKSのプライベートAPIエンドポイントの有効化
+    endpoint_private_access = true
+    // EKSのパブリックAPIエンドポイントの有効化
+    endpoint_public_access = true
+    // パブリックAPIエンドポイントにアクセス可能なネットワーク
+    public_access_cidrs = [
+      "0.0.0.0/0"
+    ]
+    // コントロールプレーンとワーカーノード間の通信を許可するためのSG
+    security_group_ids = []
+    // ワーカーノードが配置されるサブネット (コントロールプレーンとの通信のため、cross-account ENIが作成される)
+    subnet_ids = var.subnet_ids
   }
 
-  update_config {
-    // ノード更新時に利用不可能になるノードの最大数
-    max_unavailable = 1
+  kubernetes_network_config {
+    // KubernetesのPodとServiceに割り当てられるIPのファミリー (ipv4 or ipv6)
+    ip_family = "ipv4"
+    // KubernetesポッドとサービスのIPアドレスを割り当てるCIDRブロック (変更不可)
+    // VPCピアリングやTGWで接続されている他のネットワークリソースと重複しないブロックを指定しなければならない。
+    // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 のブロックの中から指定
+    service_ipv4_cidr = "172.20.0.0/16"
+
+    // EKS Auto Mode 利用時のロードバランシング機能の設定
+    elastic_load_balancing {
+      enabled = false
+    }
   }
 
-  // ロールは作成済みだけど、ポリシーがアタッチされていない状況が発生するので、depends_on でポリシーのアタッチを待つ
+  // vpc-cni, kube-proxy, corednsといったアドオンを管理対象外のアドオンとしてクラスタ作成時にインストールするか
+  // NOTE: この値を変更すると新しいクラスタが強制的に作成されるので注意
+  bootstrap_self_managed_addons = true
+
+  // CloudWatchLogsに出力するコントロールプレーンのログ設定: https://docs.aws.amazon.com/eks/latest/userguide/control-plane-logs.html
+  enabled_cluster_log_types = [ "api", "audit", "authenticator", "controllerManager", "scheduler" ]
+
+
+  // 指定したKMSのキーでetcdに保存されているKubernetesのリソースを暗号化する
+  encryption_config {
+    provider {
+      key_arn = aws_kms_key.kubernetes_encription.arn
+    }
+    // 暗号化するリソース
+    resources = [ "secrets" ]
+  }
+
+  // クラスタのアップデートポリシー
+  upgrade_policy {
+    // STANDARD: 標準サポート終了時に自動的にアップグレード
+    // EXTENDED: 標準サポート終了時に拡張サポートに入る
+    support_type = "EXTENDED"
+  }
+
+  // Kubernetesのバージョン
+  version = "1.31"
+
+  // ゾーンシフト (障害時などに対象のAZを切り離す機能)
+  zonal_shift_config {
+    enabled = false
+  }
+
+  // EKS Auto Mode 利用時のcomputeの設定
+  compute_config {
+    enabled = false
+  }
+  // EKS Auto Mode 利用時のストレージ設定
+  storage_config {
+    block_storage {
+      enabled = false
+    }
+  }
+
+  // Hybrid Nodes利用時の設定
+  // remote_network_config {}
+
   depends_on = [
-    aws_iam_role_policy_attachment.eks_node_policy,
-    aws_iam_role_policy_attachment.amazoneks_cni_ipv6_policy,
+    aws_cloudwatch_log_group.eks_control_plane
   ]
 }
 ```
 
-# ■ node-groupコンポーネント
 
-先ほど定義したnode-group-bottlerocketモジュールを呼び出し、EKSクラスタにノードグループを作成します。
+### OIDCプロバイダ
+
+IRSAを行うためのOIDCプロバイダを定義します。
+
+参考: IRSAについて: [EKSの認証・認可の仕組み解説 | Zenn](https://zenn.dev/take4s5i/articles/aws-eks-authentication#iam-roles-for-service-accounts(irsa))
+
+`terraform/modules/cluster/eks/main.tf`
+
+```tf
+/**
+ * IRSAを利用するため、IAMにEKSのOIDCプロバイダを登録
+ * 
+ * EKSの認証・認可の仕組み解説 | Zenn: https://zenn.dev/take4s5i/articles/aws-eks-authentication#iam-roles-for-service-accounts(irsa)
+ */
+resource "aws_iam_openid_connect_provider" "default" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_openid_connect_provider
+  url = aws_eks_cluster.this.identity[0].oidc[0].issuer
+
+  client_id_list = [
+    "sts.amazonaws.com",
+  ]
+}
+```
+
+
+## モジュールの出力値の定義
+
+作成したEKSクラスタを出力値とします。
+
+`terraform/modules/cluster/eks/outputs.tf`
+
+```tf
+output "eks_cluster" {
+  value = aws_eks_cluster.this
+}
+```
+
+# ■ clusterコンポーネントの定義
+
+先ほど定義したclusterモジュールを呼び出し、EKSクラスタを作成します。
 
 ## 変数定義
 
-必要な変数はclusterコンポーネントから参照します。
+- `access_entries` : KubernetesのAPIにアクセス可能なIAMユーザまたはIAMロールのARN
 
-`terraform/components/node-group/variables.tf`
+
+`terraform/components/cluster/variables.tf`
 
 ```tf
 variable project_name {
@@ -325,29 +424,45 @@ variable tfstate_region {
   description = "tfvarsが保存されているバケットのリージョン"
 }
 
-locals {
-  cluster_name = data.terraform_remote_state.cluster.outputs.cluster_name
-  cluster_version = data.terraform_remote_state.cluster.outputs.version
-  cluster_security_group_id = data.terraform_remote_state.cluster.outputs.cluster_security_group_id
-  cluster_api_endpoint = data.terraform_remote_state.cluster.outputs.api_endpoint
-  cluster_certificate = data.terraform_remote_state.cluster.outputs.cluster_certificate
-  cluster_subnet_ids = data.terraform_remote_state.cluster.outputs.subnet_ids
+variable access_entries {
+  type = list(string)
+  description = "EKSのIAMアクセスエントリに登録するIAMユーザまたはIAMロールのARN"
 }
 
-data terraform_remote_state "cluster" {
+locals {
+  cluster_name = data.terraform_remote_state.base.outputs.cluster_name
+  private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
+}
+
+// baseコンポーネントのステートを参照
+data terraform_remote_state "base" {
   backend = "s3"
 
   config = {
     region = var.tfstate_region
     bucket = var.tfstate_bucket
-    key    = "${var.project_name}/${var.stage}/cluster/terraform.tfstate"
+    key    = "${var.project_name}/${var.stage}/base/terraform.tfstate"
+  }
+}
+
+// networkコンポーネントのステートを参照
+data "terraform_remote_state" "network" {
+  // https://developer.hashicorp.com/terraform/language/state/remote-state-data#argument-reference
+  backend = "s3"
+
+  config = {
+    // https://developer.hashicorp.com/terraform/language/backend/s3
+    region = var.tfstate_region
+    bucket = var.tfstate_bucket
+    key    = "${var.project_name}/${var.stage}/network/terraform.tfstate"
   }
 }
 ```
 
 ## tfstateとプロバイダの設定
 
-`terraform/components/node-group/main.tf`
+
+`terraform/components/cluster/main.tf`
 
 ```tf
 terraform {
@@ -376,36 +491,124 @@ provider "aws" {
 }
 ```
 
-## node-group-bottlerocketモジュールの呼び出し
+## clusterモジュールの呼び出し
 
-先ほど定義した node-group-bottlerocketモジュールを呼び出します。
+先ほど定義した clusterモジュールを呼び出します。
 
-`terraform/components/node-group/main.tf`
+`terraform/components/cluster/main.tf`
 
 ```tf
 /**
- * ノードグループ
+ * EKSクラスタ
  */
-module node_group_bottlerocket_1 {
-  source = "../../modules/node-group/bottlerocket"
+module cluster {
+  source = "../../modules/cluster/eks"
   cluster_name = local.cluster_name
-  cluster_version = local.cluster_version
-  cluster_security_group_id = local.cluster_security_group_id
-  cluster_api_endpoint = local.cluster_api_endpoint
-  cluster_certificate = local.cluster_certificate
-  cluster_subnet_ids = local.cluster_subnet_ids
-  node_group_name = "ng-bottlerocket-1"
-  ami_type = "BOTTLEROCKET_x86_64"
-  instance_types = ["t3a.xlarge", "t3a.large", "t3a.medium"] // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
-  desired_size = 1
+  subnet_ids = local.private_subnet_ids
+  access_entries = var.access_entries
 }
 ```
 
-# ■ node-group コンポーネントの入力変数ファイルの作成
+## EKSアクセスエントリの定義
 
-共通変数(`terraform/components/tfvars/common.tfvars`)しか利用しないので、空のままでOK
+指定したIAMユーザー、IAMロールにKubernetes APIへのアクセス権限を付与します。  
+この設定を行うことで、指定されたロールからKubernetesのリソース(podなど)を操作できるようになります。  
 
-`terraform/components/node-group/tfvars/dev.tfvars`
+※ aws-auth ConfigMapで設定することもできますが、 `authentication_mode=API_AND_CONFIG_MAP` を設定しているので、今回はアクセスエントリから設定します。
+
+
+参考: [IAM アイデンティティと Kubernetes のアクセス許可を関連付ける](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/grant-k8s-access.html#authentication-modes)
+
+`terraform/components/cluster/main.tf`
+
+```tf
+/**
+ * IAMユーザー・ロールにkubernetesAPIへのアクセス権限を付与
+ * - EKS アクセスエントリを使用して Kubernetes へのアクセスを IAM ユーザーに許可する | AWS
+ *   https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-entries.html
+ */
+resource "aws_eks_access_entry" "admin" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry
+  for_each = toset(var.access_entries)
+  cluster_name = local.cluster_name
+  principal_arn = each.key
+  type = "STANDARD"
+
+  depends_on = [
+    module.cluster
+  ]
+}
+
+resource "aws_eks_access_policy_association" "admin" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_policy_association
+  for_each = toset(var.access_entries)
+  cluster_name = local.cluster_name
+  // アクセスポリシー: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/access-policies.html#access-policy-permissions
+  policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = each.key
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [
+    module.cluster
+  ]
+}
+```
+
+
+
+## 出力値の定義
+
+他のコンポーネントから参照するための値を出力値として定義します。
+
+`terraform/components/network/outputs.tf`
+
+```tf
+output "cluster_name" {
+  value = module.cluster.eks_cluster.name
+}
+
+output "version" {
+  value = module.cluster.eks_cluster.version
+}
+
+output "oidc_provider" {
+  // AWS CLIで確認する場合: aws eks describe-cluster --name クラスタ名 --output text --query "cluster.identity.oidc.issuer"
+  value = replace(module.cluster.eks_cluster.identity[0].oidc[0].issuer, "https://", "")
+}
+
+output "cluster_security_group_id" {
+  value = module.cluster.eks_cluster.vpc_config[0].cluster_security_group_id
+}
+
+output "api_endpoint" {
+  value = module.cluster.eks_cluster.endpoint
+}
+
+output "cluster_certificate" {
+  value = module.cluster.eks_cluster.certificate_authority[0].data
+}
+
+output "subnet_ids" {
+  value = module.cluster.eks_cluster.vpc_config[0].subnet_ids
+}
+```
+
+# ■ clusterコンポーネントの入力変数ファイルの作成
+
+※ `EDIT: ...` コメントの項目を各自編集してください
+
+clusterコンポーネントデプロイ時に入力値と指定する変数をtfvarsファイルにまとめます
+
+`terraform/components/cluster/tfvars/dev.tfvars`
+
+```ini
+access_entries = [  # EDIT: Kubernetes APIへのアクセス権限を付与していIAMユーザー・ロールを指定
+  "arn:aws:iam::xxxxxxxxxxxx:user/xxxxxxxxxxxxxxxx",
+]
+```
 
 # ■ terraformデプロイ
 
@@ -417,7 +620,7 @@ PROJECT_NAME=プロジェクト名
 # ステージ名
 STAGE=dev
 # コンポーネント
-COMPONENT=node-group
+COMPONENT=cluster
 
 # terraform plan: 作成されるリソース、現在との差分の確認
 # 実行後に .tfplan/network/plan.tfgraph ファイルが生成されるのでVSCodeで開いてみましょう。作成されるリソースの詳細を確認することができます。
@@ -428,4 +631,16 @@ make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 
 # terraform output: 出力値の確認
 make tf-output PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
+```
+
+# ■ Kubernetesへのアクセス
+
+```bash
+# ~/.kube/configに作成したEKSクラスタを設定
+CLUSTER_COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/cluster
+CLUSTER_NAME=$(terraform -chdir=$CLUSTER_COMPONENT_DIR output -raw cluster_name)
+aws eks update-kubeconfig --name $CLUSTER_NAME
+
+# EKSクラスタを確認
+k9s
 ```

@@ -1,605 +1,246 @@
-Chapter8 keycloakの構築
+Chapter7 プラグインインストール
 ---
 [READMEに戻る](../README.md)
 
 # ■ 作るもの
 
-この章ではこれまで作成してきたEKSにKeycloakアプリケーションをデプロイします。  
-KeycloakのデプロイだけではなくRDSやSecretsManagerといった周辺リソースの作成まで行います。  
-これらのリソースは、EKSにデプロイするアプリケーションに付随するAWSリソースを定義するためのserviceコンポーネントに定義していきます。
+この章ではHelmを利用してEKS以下のチャートをインストールします。  
+インストールするにあたって必要なAWSリソースはpluginコンポーネントに定義していきます。  
+
+- `aws-load-balancer-controller`
+- `metrics-server`
+- `secrets-store-csi-driver`
+- `secrets-store-csi-driver-provider-aws`
+
+
+チャートのインストールはコマンドラインで行いますが、インストールに必要なAWSリソースはTerraformで定義します。
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_08/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_07/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_08/stack.drawio.png">
+<img width="800px" src="drawio/chapter_07/stack.drawio.png">
 
-# ■ keycloakモジュール
+# ■ albcモジュール
 
-Keycloakのデプロイに必要な周辺AWSリソースの作成と、マニフェストファイルの動的生成を行うモジュールを定義します。
+`aws-load-balancer-controller` チャートに必要なAWSリソースを定義するモジュールを定義します。
 
 ## モジュールの変数定義
 
 モジュールを呼び出す際に指定する入力値の定義を行います
 
-- ``
 - `cluster_name` EKSクラスタ名
-- `cluster_oidc_provider` IRSAで利用するOIDCプロバイダ
-- `cluster_security_group_id` EKSクラスタセキュリティグループ
-- `alb_ingress_sg` ALBのセキュリティグループ
-- `vpc_id` VPCのID
-- `private_subnet_ids` プライベートサブネットID
-- `project_dir` プロジェクトディレクトリ絶対パス
+- `vpc_id` ALBに設定するセキュリティグループ
+- `project_dir`
+- `ingress_cidr_blocks`
 
-`terraform/modules/service/keycloak/variables.tf`
+`terraform/modules/plugin/albc/variables.tf`
 
 ```tf
-variable "cluster_name" {
+variable cluster_name {
   type = string
   description = "EKSクラスタ名"
 }
-variable "cluster_oidc_provider" {
-  type = string
-  description = "EKSクラスタのOIDCプロバイダ"
-}
-variable "cluster_security_group_id" {
-  type = string
-  description = "EKSクラスタのクラスタセキュリティグループID"
-}
-variable "alb_ingress_sg" {
-  type = string
-  description = "ALB Ingress ControllerのセキュリティグループID"
-}
-variable "vpc_id" {
+variable vpc_id {
   type = string
   description = "VPC ID"
 }
-variable "private_subnet_ids" {
-  type = list(string)
-  description = "プライベートサブネットID"
-}
-variable "project_dir" {
+variable project_dir {
   type = string
   description = "プロジェクトディレクトリの絶対パス"
 }
-
-locals {
-  account_id = data.aws_caller_identity.this.account_id
-  aws_region = data.aws_region.this.name
-  namespace = "keycloak"
-  service_account = "keycloak"
-  db_user = "admin"
-  db_name = "keycloak"
+variable ingress_cidr_blocks {
+  // ALBへのアクセスを許可するCIDR
+  type = list(string)
+  default = ["0.0.0.0/0"]
+  description = "ALBへのアクセスを許可するCIDR"
 }
 
+locals {
+  namespace = "kube-system"
+  service_account = "aws-load-balancer-controller"
+  app_version = "v2.11.0"
+}
 
-data "aws_caller_identity" "this" {}
-
-data "aws_region" "this" {}
 ```
 
 ## モジュールのリソース定義
 
 ### IAMロール
 
-`keycloak` のポッドを動かすサービスアカウントとサービスアカウントに紐づけるIAMロールを作成します。  
-ポリシーには、SecretsManagerからDBのログイン情報と初期ユーザー情報を取得するための `secretsmanager:GetSecretValue` `secretsmanager:DescribeSecret` 権限を付与します。
+`aws-load-balancer-controller` サービスアカウントに紐づけるIAMロールを定義し、Pod Identityに登録します。  
+必要な権限は `https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json` からダウンロードします。  
 
+参考: [マニフェストを使用して AWS Load Balancer Controller インストールする](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/lbc-manifest.html)
 
-`terraform/modules/service/keycloak/main.tf`
+`terraform/modules/plugin/albc/main.tf`
 
 ```tf
 /**
- * サービスアカウントに紐づけるIAMロールの作成
+ * AWS Load Balancer ControllerがALBを作成するために必要なRoleを作成
  */
-resource "aws_iam_role" "keycloak" {
-  name = "${var.cluster_name}-KeycloakRole"
+resource "aws_iam_role" "albc" {
+  name = "${var.cluster_name}-EKSIngressAWSLoadBalancerControllerRole"
   assume_role_policy = jsonencode({
-    "Version": "2012-10-17"
-    "Statement": {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::${local.account_id}:oidc-provider/${var.cluster_oidc_provider}"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringLike": {
-          "${var.cluster_oidc_provider}:sub": "system:serviceaccount:${local.namespace}:${local.service_account}",
-          "${var.cluster_oidc_provider}:aud": "sts.amazonaws.com"
-        }
-      }
-    }
-  })
-}
-
-resource "aws_iam_policy" "keycloak" {
-  name = "${var.cluster_name}-KeycloakPolicy"
-  policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
-      {
-        "Effect": "Allow",
-        "Action": [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
-        ],
-        "Resource": [
-          "arn:aws:secretsmanager:${local.aws_region}:${local.account_id}:secret:/${var.cluster_name}/*"
-        ]
-      }
+        {
+            "Sid": "AllowEksAuthToAssumeRoleForPodIdentity",
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "pods.eks.amazonaws.com"
+            },
+            "Action": [
+                "sts:AssumeRole",
+                "sts:TagSession"
+            ]
+        }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "keycloak" {
-  role = aws_iam_role.keycloak.name
-  policy_arn = aws_iam_policy.keycloak.arn
-}
-```
+data "http" "albc" {
+  // https://registry.terraform.io/providers/hashicorp/http/latest/docs/data-sources/http
 
-### keycloakのログイン情報を管理するSecretsManager
-
-terraform組み込みの[randomプロバイダ](https://registry.terraform.io/providers/hashicorp/random/latest)の [random_passwordリソース](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password)を利用して、keycloak初期化時に作成されるadminユーザーのログインIDとパスワードを生成し、SecretsManage登録します。
-
-
-
-`terraform/modules/service/keycloak/main.tf`
-
-```tf
-/**
- * Keycloakのadminログイン情報を保持する SecretsManager
- */
-resource "random_password" "keycloak_user" {
-  // https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password
-
-  length           = 32
-  lower            = true  # 小文字を文字列に含める
-  numeric          = true  # 数値を文字列に含める
-  upper            = true  # 大文字を文字列に含める
-  special          = false # 記号を文字列に含める
-}
-
-resource "random_password" "keycloak_password" {
-  length           = 32
-  lower            = true  # 小文字を文字列に含める
-  numeric          = true  # 数値を文字列に含める
-  upper            = true  # 大文字を文字列に含める
-  special          = true  # 記号を文字列に含める
-  override_special = "@_=+-"  # 記号で利用する文字列を指定 (default: !@#$%&*()-_=+[]{}<>:?)
-}
-
-resource "aws_secretsmanager_secret" "keycloak_admin_user" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret
-
-  name = "/${var.cluster_name}/keycloak"
-  recovery_window_in_days = 0
-  force_overwrite_replica_secret = true
-}
-
-resource "aws_secretsmanager_secret_version" "keycloak_admin_user" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/secretsmanager_secret_version
-
-  secret_id = aws_secretsmanager_secret.keycloak_admin_user.id
-  secret_string = jsonencode({
-    user = random_password.keycloak_user.result
-    password = random_password.keycloak_password.result
-  })
-}
-```
-
-### RDSとその接続情報を保持するSecretsManagerを作成
-
-keycloakが利用するデータベースとそのログイン情報を管理するSecretsManagerを定義します。
-
-
-`terraform/modules/service/keycloak/main.tf`
-
-```tf
-/**
- * RDS
- */
-resource "aws_security_group" "app_db_sg" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group
-
-  name = "${var.cluster_name}-keycloak-db"
-  vpc_id = var.vpc_id
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    security_groups = [var.cluster_security_group_id]
+  url = "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json"
+  request_headers = {
+    Accept = "application/json"
   }
+}
+
+resource "aws_iam_policy" "albc" {
+  name   = "${var.cluster_name}-AwsLoadBalancerControllerPolicy"
+  policy = data.http.albc.response_body
+}
+
+resource "aws_iam_role_policy_attachment" "albc" {
+  role = aws_iam_role.albc.name
+  policy_arn = aws_iam_policy.albc.arn
+}
+
+resource "aws_eks_pod_identity_association" "albc" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_pod_identity_association
+
+  cluster_name    = var.cluster_name
+  namespace       = local.namespace
+  service_account = local.service_account
+  role_arn        = aws_iam_role.albc.arn
+}
+```
+
+### セキュリティグループ
+
+ALBに紐づけるセキュリティグループを定義します。
+
+
+`terraform/modules/plugin/albc/main.tf`
+
+```tf
+/**
+ * ALB のセキュリティグループ
+ */
+resource "aws_security_group" "alb_ingress" {
+  name        = "${var.cluster_name}-AlbIngres"
+  description = "Allow HTTP, HTTPS access."
+  vpc_id      = var.vpc_id
+
   ingress {
-    from_port = 3306
-    to_port = 3306
-    protocol = "tcp"
-    // EKSクラスタのセキュリティグループからのアクセスを許可
-    security_groups = [var.cluster_security_group_id]
+    description = "Allow HTTP access."
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = var.ingress_cidr_blocks
   }
+
+  ingress {
+    description = "Allow HTTPS access."
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = var.ingress_cidr_blocks
+  }
+
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
   tags = {
-    "Name" = "${var.cluster_name}-keycloak-db"
+    Name = "${var.cluster_name}-AlbIngres"
   }
-}
-
-resource "aws_db_parameter_group" "app_db_pg" {
-  // MySQLのパラメータの確認: aws rds describe-engine-default-parameters --db-parameter-group-family mysql8.0
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_parameter_group
-
-  name = "${var.cluster_name}-keycloak-db"
-  family = "mysql8.0"
-  parameter {
-    name = "character_set_client"
-    value = "utf8mb4"
-  }
-  parameter {
-    name = "character_set_connection"
-    value = "utf8mb4"
-  }
-  parameter {
-    name = "character_set_database"
-    value = "utf8mb4"
-  }
-  parameter {
-    name = "character_set_filesystem"
-    value = "utf8mb4"
-  }
-  parameter {
-    name = "character_set_results"
-    value = "utf8mb4"
-  }
-  parameter {
-    name = "character_set_server"
-    value = "utf8mb4"
-  }
-  parameter {
-    name = "collation_connection"
-    value = "utf8mb4_bin"
-  }
-  parameter {
-    name = "collation_server"
-    value = "utf8mb4_bin"
-  }
-}
-
-resource "aws_db_subnet_group" "app_db_subnet_group" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_subnet_group
-
-  name       = "${var.cluster_name}-keycloak-db"
-  subnet_ids = var.private_subnet_ids
-}
-
-resource "random_password" "db_password" {
-  length           = 16
-  lower            = true  # 小文字を文字列に含める
-  numeric          = true  # 数値を文字列に含める
-  upper            = true  # 大文字を文字列に含める
-  special          = true  # 記号を文字列に含める
-  override_special = "@_=+-"  # 記号で利用する文字列を指定 (default: !@#$%&*()-_=+[]{}<>:?)
-}
-
-resource "aws_db_instance" "app_db" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/db_instance
-
-  identifier = "${var.cluster_name}-keycloak-db"
-  storage_encrypted = true
-  engine               = "mysql"
-  allocated_storage    = 20
-  max_allocated_storage = 100
-  db_name              = local.db_name
-  engine_version       = "8.0"
-  instance_class       = "db.t3.micro"
-  db_subnet_group_name = aws_db_subnet_group.app_db_subnet_group.name
-  backup_retention_period = 30
-  enabled_cloudwatch_logs_exports = ["error", "general", "slowquery"]
-  multi_az = false
-  parameter_group_name = aws_db_parameter_group.app_db_pg.name
-  port = 3306
-  vpc_security_group_ids = [aws_security_group.app_db_sg.id]
-  storage_type = "gp3"
-  network_type = "IPV4"
-  username = local.db_user
-  password = random_password.db_password.result
-  skip_final_snapshot  = true
-  deletion_protection = false
-  lifecycle {
-    // terraformから削除されたくない場合はコメントイン
-    #prevent_destroy = true
-  }
-}
-
-
-/**
- * RDS のログイン情報を保持する SecretsManager
- */
-resource "aws_secretsmanager_secret" "app_db_secret" {
-  name = "/${var.cluster_name}/db"
-  recovery_window_in_days = 0
-  force_overwrite_replica_secret = true
-}
-
-resource "aws_secretsmanager_secret_version" "app_db_secret_version" {
-  secret_id = aws_secretsmanager_secret.app_db_secret.id
-  secret_string = jsonencode({
-    db_user = local.db_user
-    db_password = random_password.db_password.result
-    db_host = aws_db_instance.app_db.address
-    db_port = tostring(aws_db_instance.app_db.port)
-    db_name = local.db_name
-  })
 }
 ```
 
+### values.yaml
 
-### マニフェストファイル
+Helmでalbcをインストールする際に指定するvalues.yamlファイルを動的に生成します。
 
-keycloakをKubernetesにapplyするためのマニフェストファイルを動的に生成します。  
-生成されたマニフェストファイルは `$PROJECT_DIR/tutorial/service/keycloak/tmp/app.yaml` に出力されます。
-
-
-`terraform/modules/service/keycloak/main.tf`
+`terraform/modules/plugin/albc/main.tf`
 
 ```tf
 /**
- * マニフェストファイルの生成
+ * ALBCをHelmでインストールするためのvalues.yaml
  */
-resource "local_file" "keycloak_manifest" {
-  filename = "${var.project_dir}/service/keycloak/tmp/app.yaml"
+resource "local_file" "albc_values" {
+  filename = "${var.project_dir}/plugin/albc/tmp/values.yaml"
   content = templatefile(
-    "${path.module}/app.yaml",
+    "${path.module}/values.yaml",
     {
-      namespace = local.namespace,
-      service_account = local.service_account,
-      role_arn = aws_iam_role.keycloak.arn,
-      db_secret_name = aws_secretsmanager_secret.app_db_secret.name,
-      user_secret_name = aws_secretsmanager_secret.keycloak_admin_user.name
-      alb_ingress_sg = var.alb_ingress_sg
+      cluster_name = var.cluster_name
+      service_account = local.service_account
+      security_group_id = aws_security_group.alb_ingress.id
+      role_arn = aws_iam_role.albc.arn
+      image_tag = local.app_version
+      vpc_id = var.vpc_id
     }
   )
 }
 ```
 
-マニフェストファイルのテンプレート
+values.yamlのテンプレートファイル
 
-`terraform/modules/service/keycloak/app.yaml`
+`terraform/modules/plugin/albc/values.yaml`
 
 ```yml
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: ${namespace}
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
+clusterName: ${cluster_name}
+serviceAccount:
+  create: true
   name: ${service_account}
-  namespace: ${namespace}
   annotations:
     eks.amazonaws.com/role-arn: ${role_arn}
----
-#
-# Keycloakのデータベース接続情報をSecrets Managerから取得する
-#
-apiVersion: secrets-store.csi.x-k8s.io/v1
-kind: SecretProviderClass
-metadata:
-  name: keycloak-db-spc
-  namespace: ${namespace}
-spec:
-  provider: aws
-  secretObjects:
-    - secretName: keycloak-db-secret
-      type: Opaque
-      data:
-        - key: kc_db_host
-          objectName: alias_db_host
-        - key: kc_db_port
-          objectName: alias_db_port
-        - key: kc_db_user
-          objectName: alias_db_user
-        - key: kc_db_password
-          objectName: alias_db_password
-        - key: kc_db_name
-          objectName: alias_db_name
-  parameters:
-    # jmesPathを利用する場合JSONの値はString型である必要がある
-    objects: |
-        - objectName: "${db_secret_name}"
-          objectType: "secretsmanager"
-          jmesPath:
-            - path: db_host
-              objectAlias: alias_db_host
-            - path: db_port
-              objectAlias: alias_db_port
-            - path: db_user
-              objectAlias: alias_db_user
-            - path: db_password
-              objectAlias: alias_db_password
-            - path: db_name
-              objectAlias: alias_db_name
----
-#
-# Keycloakの管理ユーザログイン情報をSecrets Managerから取得する
-#
-apiVersion: secrets-store.csi.x-k8s.io/v1
-kind: SecretProviderClass
-metadata:
-  name: keycloak-user-spc
-  namespace: ${namespace}
-spec:
-  provider: aws
-  secretObjects:
-    - secretName: keycloak-user-secret
-      type: Opaque
-      data:
-        - key: keycloak_admin
-          objectName: alias_user
-        - key: keycloak_admin_password
-          objectName: alias_password
-  parameters:
-    objects: |
-        - objectName: "${user_secret_name}"
-          objectType: "secretsmanager"
-          jmesPath:
-            - path: user
-              objectAlias: alias_user
-            - path: password
-              objectAlias: alias_password
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: keycloak
-  namespace: ${namespace}
-  labels:
-    app: keycloak
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: keycloak
-  template:
-    metadata:
-      labels:
-        app: keycloak
-    spec:
-      serviceAccountName: ${service_account}
-
-      volumes:
-        - name: keycloak-user-secret-volume
-          csi:
-            driver: secrets-store.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: keycloak-user-spc
-        - name: keycloak-db-secret-volume
-          csi:
-            driver: secrets-store.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: keycloak-db-spc
-      containers:
-        #- name: debug
-        #  image: amazon/aws-cli
-        #  command: ["sleep", "3600"]
-        - name: keycloak
-          image: quay.io/keycloak/keycloak:25.0.1
-          args: ["start"]
-          env:
-            # All Configuration | Keycloak: https://www.keycloak.org/server/all-config
-            - name: KC_PROXY_HEADERS  # リバースプロキシを利用する場合の設定: https://www.keycloak.org/server/reverseproxy
-              value: "xforwarded"
-            - name: KEYCLOAK_ADMIN
-              valueFrom:
-                secretKeyRef:
-                  name: keycloak-user-secret
-                  key: keycloak_admin
-            - name: KEYCLOAK_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: keycloak-user-secret
-                  key: keycloak_admin_password
-            - name: KC_DB
-              value: "mysql"
-            - name: KC_DB_URL_DATABASE
-              valueFrom:
-                secretKeyRef:
-                  name: keycloak-db-secret
-                  key: kc_db_name
-            - name: KC_DB_URL_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: keycloak-db-secret
-                  key: kc_db_host
-            - name: KC_DB_URL_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: keycloak-db-secret
-                  key: kc_db_port
-            - name: KC_DB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: keycloak-db-secret
-                  key: kc_db_user
-            - name: KC_DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: keycloak-db-secret
-                  key: kc_db_password
-            - name: KC_HOSTNAME_STRICT
-              value: "false"
-            - name: KC_HTTP_ENABLED  # プロダクションモードではHTTPが無効になるので、明示的にHTTPを有効にする
-              value: "true"
-          ports:
-            - name: http
-              containerPort: 8080
-          readinessProbe:
-            httpGet:
-              path: /realms/master
-              port: 8080
-          volumeMounts:
-            - name: keycloak-user-secret-volume
-              mountPath: /mnt/keycloak-user-secret-store
-              readOnly: true
-            - name: keycloak-db-secret-volume
-              mountPath: /mnt/keycloak-db-secret-store
-              readOnly: true
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: keycloak-svc
-  namespace: ${namespace}
-  labels:
-    app: keycloak
-spec:
-  ports:
-    - name: http
-      port: 8080
-      targetPort: 8080
-  selector:
-    app: keycloak
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: keycloak-alb
-  namespace: ${namespace}
-  # Ingress annotations - AWS Load Balancer Controller
-  # https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.4/guide/ingress/annotations/
-  annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/tags: "PROJECT=TERRAFORM_TUTORIAL_EKS"
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
-    alb.ingress.kubernetes.io/security-groups: ${alb_ingress_sg}
-    alb.ingress.kubernetes.io/manage-backend-security-group-rules: "true"
-    alb.ingress.kubernetes.io/healthcheck-path: /realms/master
-spec:
-  ingressClassName: alb
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: keycloak-svc
-                port:
-                  number: 8080
+image:
+  repository: public.ecr.aws/eks/aws-load-balancer-controller
+  tag: ${image_tag}
+region: ap-northeast-1
+vpcId: ${vpc_id}
 ```
 
-# ■ Service コンポーネント
+## モジュールの出力値の定義
 
-ServiceコンポーネントはEKS上にデプロイされるアプリケーションの付随リソースを定義するためのコンポーネントです。
+`terraform/modules/plugin/albc/outputs.tf`
+
+```tf
+output "alb_ingress_sg" {
+  value = aws_security_group.alb_ingress.id
+}
+```
+
+
+
+# ■ pluginコンポーネント
+
+ServiceコンポーネントはKubernetesのプラグインのインストールに必要なAWSリソースを定義するためのコンポーネントです。
 
 ## 変数定義
 
-必要な変数はbase, network, cluster, pluginコンポーネントから参照します。
+必要な変数はbase, network, clusterコンポーネントから参照します。
 
-`terraform/components/service/variables.tf`
+`terraform/components/plugin/variables.tf`
 
 ```tf
 variable project_name {
@@ -623,16 +264,12 @@ variable tfstate_region {
 }
 
 locals {
-  cluster_name = data.terraform_remote_state.base.outputs.cluster_name
-  alb_ingress_sg = data.terraform_remote_state.plugin.outputs.alb_ingress_sg
-  vpc_id = data.terraform_remote_state.network.outputs.vpc_id
-  private_subnet_ids = data.terraform_remote_state.network.outputs.private_subnet_ids
-  oidc_provider = data.terraform_remote_state.cluster.outputs.oidc_provider
-  cluster_security_group_id = data.terraform_remote_state.cluster.outputs.cluster_security_group_id
   project_dir = data.terraform_remote_state.base.outputs.project_dir
+  cluster_name = data.terraform_remote_state.cluster.outputs.cluster_name
+  vpc_id = data.terraform_remote_state.network.outputs.vpc_id
 }
 
-data "terraform_remote_state" "base" {
+data terraform_remote_state "base" {
   backend = "s3"
 
   config = {
@@ -643,6 +280,7 @@ data "terraform_remote_state" "base" {
 }
 
 data "terraform_remote_state" "network" {
+  // https://developer.hashicorp.com/terraform/language/state/remote-state-data#argument-reference
   backend = "s3"
 
   config = {
@@ -652,7 +290,7 @@ data "terraform_remote_state" "network" {
   }
 }
 
-data "terraform_remote_state" "cluster" {
+data terraform_remote_state "cluster" {
   backend = "s3"
 
   config = {
@@ -662,20 +300,11 @@ data "terraform_remote_state" "cluster" {
   }
 }
 
-data "terraform_remote_state" "plugin" {
-  backend = "s3"
-
-  config = {
-    region = var.tfstate_region
-    bucket = var.tfstate_bucket
-    key    = "${var.project_name}/${var.stage}/plugin/terraform.tfstate"
-  }
-}
 ```
 
 ## tfstateとプロバイダの設定
 
-`terraform/components/service/main.tf`
+`terraform/components/plugin/main.tf`
 
 ```tf
 terraform {
@@ -704,31 +333,36 @@ provider "aws" {
 }
 ```
 
-## keycloakモジュールの呼び出し
+## albcモジュールの呼び出し
 
-先ほど定義した keycloakモジュールを呼び出します。
+先ほど定義した albcモジュールを呼び出します。
 
-`terraform/components/service/main.tf`
+`terraform/components/plugin/main.tf`
 
 ```tf
-module keycloak {
-  source = "../../modules/service/keycloak"
+module albc {
+  source = "../../modules/plugin/albc"
   cluster_name = local.cluster_name
-  cluster_oidc_provider = local.oidc_provider
-  cluster_security_group_id = local.cluster_security_group_id
-  alb_ingress_sg = local.alb_ingress_sg
   vpc_id = local.vpc_id
-  private_subnet_ids = local.private_subnet_ids
   project_dir = local.project_dir
 }
 ```
 
+## 出力値の定義
 
-# ■ service コンポーネントの入力変数ファイルの作成
+`terraform/components/plugin/main.tf`
+
+```tf
+output "alb_ingress_sg" {
+  value = module.albc.alb_ingress_sg
+}
+```
+
+# ■ plugin コンポーネントの入力変数ファイルの作成
 
 共通変数(`terraform/components/tfvars/common.tfvars`)しか利用しないので、空のままでOK
 
-`terraform/components/service/tfvars/dev.tfvars`
+`terraform/components/plugin/tfvars/dev.tfvars`
 
 
 # ■ terraformデプロイ
@@ -741,7 +375,7 @@ PROJECT_NAME=プロジェクト名
 # ステージ名
 STAGE=dev
 # コンポーネント
-COMPONENT=service
+COMPONENT=plugin
 
 # terraform plan: 作成されるリソース、現在との差分の確認
 # 実行後に .tfplan/network/plan.tfgraph ファイルが生成されるのでVSCodeで開いてみましょう。作成されるリソースの詳細を確認することができます。
@@ -754,68 +388,121 @@ make tf-apply PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 make tf-output PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 ```
 
-作成し終わったらSecretsManagerに登録された値を確認してみましょう。
+# ■ aws-load-balancer-controller のインストール
+
+AWS Load Balancer ControllerはKubernetesクラスタがELBを管理するためのコントローラで、IngressリソースでALBをプロビジョニングすることができます。
+
+Terraformで生成したvalues.yamlを指定してチャートをインストールします。
+
+- [Install AWS Load Balancer Controller with Helm](https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html)
+- [AWS Load Balancer Controller v2.11.0](https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.11/)
+- [kubernetes-sigs/aws-load-balancer-controller | GitHub](https://github.com/kubernetes-sigs/aws-load-balancer-controller)
 
 ```bash
-CLUSTER_COMPONENT_DIR=$PROJECT_DIR/tutorial/terraform/components/cluster
-CLUSTER_NAME=$(terraform -chdir=$CLUSTER_COMPONENT_DIR output -raw cluster_name)
+# リポジトリ追加
+helm repo add eks https://aws.github.io/eks-charts
 
-# keycloakのadminユーザーのログイン情報
-aws secretsmanager get-secret-value --secret-id /$CLUSTER_NAME/keycloak | jq -r ".SecretString" | jq
+# リポジトリのアップデート
+helm repo update eks
 
-# DBのログイン情報
-aws secretsmanager get-secret-value --secret-id /$CLUSTER_NAME/db | jq -r ".SecretString" | jq
+# チャートの最新バージョンチェック
+# CHART_VERSION=$(helm show chart eks/aws-load-balancer-controller | yq -r ".version")
+# echo $CHART_VERSION
+
+# インストール
+helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  --version "1.11.0" \
+  --namespace "kube-system" \
+  --create-namespace \
+  --values $PROJECT_DIR/tutorial/plugin/albc/tmp/values.yaml
 ```
 
-# ■ keycloakのデプロイ
+# ■ metrics-server のインストール
 
-Terraformの実行が完了すると `$PROJECT_DIR/tutorial/service/keycloak/tmp/app.yaml` にマニフェストファイルが出力されるので、applyします。
+metrics-serverはEKSでHorizontal Pod Autoscaler (Podの水平スケーリング)を利用するために必要なチャートです。
+
+- [Horizontal Pod Autoscaler を使用してポッドデプロイをスケールする | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/horizontal-pod-autoscaler.html)
+- [kubernetes-sigs/metrics-server | GitHub](https://github.com/kubernetes-sigs/metrics-server)
+- [metrics-server - Helm Chart | ArtifactHUB](https://artifacthub.io/packages/helm/metrics-server/metrics-server)
 
 ```bash
-# デプロイ
-kubectl apply -f $PROJECT_DIR/tutorial/service/keycloak/tmp/app.yaml
+# リポジトリ追加
+helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+
+# リポジトリのアップデート
+helm repo update metrics-server
+
+# チャートの最新バージョンチェック
+# CHART_VERSION=$(helm show chart metrics-server/metrics-server | yq -r ".version")
+# echo $CHART_VERSION
 
 
-# Podの起動確認
-kubectl -n keycloak get pod
+# インストール
+helm upgrade --install metrics-server metrics-server/metrics-server \
+  --version "3.12.2" \
+  --namespace "kube-system" \
+  --create-namespace
 ```
 
-Podが起動したらkeycloakの設定を行います。  
-keycloakはデフォルトでhttpでログインできないので、ログインできるように設定します。
+# ■ secrets-store-csi-driver と secrets-store-csi-driver-provider-aws のインストール
 
-```bash
-# k9sでkeycloak コンテナのshellを起動
-# keycloakネームスペースの keycloak-xxxxxxxxxx-xxxxx ポッド
-k9s
-```
+secrets-store-csi-driver と secrets-store-csi-driver-provider-aws はEKSでSecretsManagerに保存されているシークレットを利用するために必要なチャートです。
 
-keycloakコンテナのshell内での操作
+## Secrets Store CSI Driver
 
-```bash
-# SecretsManager (/<app_name>/<ステージ>/keycloak) のユーザー名とパスワードでログイン
-$ /opt/keycloak/bin/kcadm.sh config credentials \
-    --server http://localhost:8080 \
-    --realm master \
-    --user $KEYCLOAK_ADMIN \
-    --password $KEYCLOAK_ADMIN_PASSWORD
-
-# sslRequiredを無効化
-$ /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
-
-$ exit
-```
-
-ALBのドメインを確認してブラウザでアクセスしてみましょう
-
-```bash
-# ALBのドメインを確認
-kubectl -n keycloak get ing
-```
-
-ブラウザでアクセスしたら、SecretsManagerに保存されているログイン情報でログインしてみましょう。
+- [Kubernetes Secrets Store CSI Driver](https://secrets-store-csi-driver.sigs.k8s.io/)
+- [Amazon Elastic Kubernetes Service で AWS Secrets Manager シークレットを使用する](https://docs.aws.amazon.com/ja_jp/secretsmanager/latest/userguide/integrating_csi_driver.html)
 
 
 ```bash
-# keycloakのadminユーザーのログイン情報
-aws secretsmanager get-secret-value --secret-id /$CLUSTER_NAME/keycloak | jq -r ".SecretString" | jq
+# リポジトリ追加
+helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+
+# リポジトリのアップデート
+helm repo update
+
+# チャートの最新バージョンのチェック
+# CHART_VERSION=$(helm show chart secrets-store-csi-driver/secrets-store-csi-driver | yq -r ".version")
+# echo $CHART_VERSION
+
+# インストール
+helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+  --version "1.4.7" \
+  --namespace kube-system \
+  --create-namespace \
+  --set "syncSecret.enabled=true" \
+  --set "enableSecretRotation=true"
 ```
+
+## ASCP (aws secrets store csi provider)
+
+- [secrets-store-csi-driver-provider-aws | GitHub](https://github.com/aws/secrets-store-csi-driver-provider-aws)
+- [Amazon Elastic Kubernetes Service で AWS Secrets Manager シークレットを使用する](https://docs.aws.amazon.com/ja_jp/secretsmanager/latest/userguide/integrating_csi_driver.html)
+
+
+```bash
+# リポジトリ追加
+helm repo add aws-secrets-manager https://aws.github.io/secrets-store-csi-driver-provider-aws
+
+# リポジトリのアップデート
+helm repo update
+
+# チャートの最新バージョンのチェック
+# CHART_VERSION=$(helm show chart aws-secrets-manager/secrets-store-csi-driver-provider-aws | yq -r ".version")
+# echo $CHART_VERSION
+
+# インストール
+helm upgrade --install secrets-provider-aws aws-secrets-manager/secrets-store-csi-driver-provider-aws \
+  --version "0.3.10" \
+  --namespace kube-system \
+  --create-namespace
+```
+
+# ■ 確認
+
+k9sで以下を確認します
+
+- kube-systemネームスペースのdeploymentに `aws-load-balancer-controller` が存在する
+- kube-systemネームスペースのdeploymentに `metrics-server` が存在する
+- kube-systemネームスペースのdaemonsetに `csi-secrets-store-secrets-store-csi-driver` `secrets-provider-aws-secrets-store-csi-driver-provider-aws` が存在する
+- aws-load-balancer-controllerサービスアカウントのAnnotationsに ` eks.amazonaws.com/role-arn: arn:aws:iam::111111111111:role/xxxxx-dev-EKSIngressAWSLoadBalancerControllerRole` が設定されている

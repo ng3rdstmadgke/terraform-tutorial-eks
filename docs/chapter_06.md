@@ -1,142 +1,308 @@
-Chapter6 アドオンインストール
+Chapter5 ノードグループ作成
 ---
 [READMEに戻る](../README.md)
 
 # ■ 作るもの
 
-この章では以下のEKSのアドオンをインストールします。
-
-- `eks-pod-identity-agent`
-- `aws-ebs-csi-driver`
-- `snapshot-controller`
-
+この章ではEKSのノードグループを作成します。
 
 ## 構成図
 
-<img width="900px" src="drawio/chapter_06/architecture.drawio.png">
+<img width="900px" src="drawio/chapter_05/architecture.drawio.png">
 
 ## コンポーネント
 
-<img width="800px" src="drawio/chapter_06/stack.drawio.png">
+<img width="800px" src="drawio/chapter_05/stack.drawio.png">
 
-# ■ ebs-csi-driverモジュール
+# ■ node-group-bottlerocketモジュール
 
-ebs-csi-driverアドオンのインストールに必要な付随リソースを作成するモジュールを定義します。
-
+OSにBottlerocketを利用するノードグループを作成するモジュールを定義します。
 
 ## モジュールの変数定義
 
-`terraform/modules/addon/ebs-csi-driver/variables.tf`
+モジュールを呼び出す際に指定する入力値の定義を行います
+
+`cluster_name` EKSクラスタ名
+`cluster_version` EKSクラスタのバージョン
+`cluster_security_group_id` EKSクラスタセキュリティグループ
+`cluster_api_endpoint` EKSクラスタのAPIエンドポイント
+`cluster_certificate` EKSクラスタとの通信に必要なBase64エンコードされた証明書
+`cluster_subnet_ids` EKSクラスタのサブネット
+`node_group_name` 任意のノードグループ名
+`ami_type` ノードのAMI。 `BOTTLEROCKET_ARM_64` `BOTTLEROCKET_x86_64` `BOTTLEROCKET_ARM_64_NVIDIA` `BOTTLEROCKET_x86_64_NVIDIA` から選択。
+`instance_types` ノードのインスタンスタイプ
+`desired_size` ノードの起動数
+
+
+`terraform/modules/node-group/bottlerocket/variables.tf`
 
 ```tf
 variable cluster_name {
   type = string
   description = "EKSクラスタ名"
 }
+variable cluster_version {
+  type = string
+  description = "Kubernetesバージョン"
+}
+variable cluster_security_group_id {
+  type = string
+  description = "EKSクラスタのクラスタセキュリティグループID"
+}
+variable cluster_api_endpoint {
+  type = string
+  description = "EKSクラスタのAPIエンドポイント"
+}
+variable cluster_certificate {
+  type = string
+  description = "EKSクラスタの証明書"
+}
+variable cluster_subnet_ids {
+  type = list(string)
+  description = "EKSクラスタのサブネットID"
+}
+variable node_group_name {
+  type = string
+  description = "ノードグループ名"
+}
+variable ami_type {
+  type = string
+  description = "ノードのAMIタイプ"
+  validation {
+    condition = contains([
+      "BOTTLEROCKET_ARM_64",
+      "BOTTLEROCKET_x86_64",
+      "BOTTLEROCKET_ARM_64_NVIDIA",
+      "BOTTLEROCKET_x86_64_NVIDIA",
+    ], var.ami_type)
+    error_message = "Invalid AMI type. Please specify one of the following: BOTTLEROCKET_ARM_64, BOTTLEROCKET_x86_64, BOTTLEROCKET_ARM_64_NVIDIA, BOTTLEROCKET_x86_64_NVIDIA"
+  }
+}
+variable instance_types {
+  type = list(string)
+  description = "ノードのインスタンスタイプ"
+  default = ["m6a.large"]
+}
+variable desired_size {
+  type = number
+  description = "起動するノード数"
+  default = 1
+}
+
+data "aws_eks_cluster" "this" {
+  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/eks_cluster
+  name = var.cluster_name
+}
 ```
 
 ## モジュールのリソースの定義
 
-ebs-csi-driverのサービスアカウントが利用するIAMロールを定義します。
+### ノードロール
 
-`terraform/modules/addon/ebs-csi-driver/main.tf`
+EKSのノードとして起動するEC2インスタンスに付与するIAMロールの定義します。
+
+参考: [Amazon EKS ノードの IAM ロール](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-node-role.html)
+
+`terraform/modules/node-group/bottlerocket/main.tf`
 
 ```tf
-resource "aws_iam_role" "ebs_csi_controller_sa_role" {
-  name = "${var.cluster_name}-EbsCsiControllerSaRole"
+// Amazon EKS ノードの IAM ロール: https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/create-node-role.html#create-worker-node-role
+resource "aws_iam_role" "eks_node_role" {
+  name = "${var.cluster_name}-${var.node_group_name}-EKSNodeRole"
   assume_role_policy = jsonencode({
     "Version": "2012-10-17",
     "Statement": [
-        {
-            "Sid": "AllowEksAuthToAssumeRoleForPodIdentity",
-            "Effect": "Allow",
-            "Principal": {
-                "Service": "pods.eks.amazonaws.com"
-            },
-            "Action": [
-                "sts:AssumeRole",
-                "sts:TagSession"
-            ]
-        }
+      {
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "ec2.amazonaws.com"
+        },
+        "Action": "sts:AssumeRole"
+      }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "managed_policies" {
+resource "aws_iam_role_policy_attachment" "eks_node_policy" {
   for_each = toset([
-    "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
+    "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   ])
-  role = aws_iam_role.ebs_csi_controller_sa_role.name
+  role = aws_iam_role.eks_node_role.name
   policy_arn = each.key
 }
 
-resource "aws_iam_policy" "ebs_csi_driver_encrypt_volume_policy" {
-  name = "${var.cluster_name}-EbsCsiDriverEncryptVolumePolicy"
-  policy = jsonencode(
-    {
-      "Version": "2012-10-17",
-      "Statement": [
-        {
-          "Effect": "Allow",
-          "Action": [
-            "kms:CreateGrant",
-            "kms:ListGrants",
-            "kms:RevokeGrant"
-          ],
-          "Resource": ["*"],
-          "Condition": {
-            "Bool": {
-              "kms:GrantIsForAWSResource": "true"
-            }
-          }
-        },
-        {
-          "Effect": "Allow",
-          "Action": [
-            "kms:Encrypt",
-            "kms:Decrypt",
-            "kms:ReEncrypt*",
-            "kms:GenerateDataKey*",
-            "kms:DescribeKey"
-          ],
-          "Resource": ["*"]
-        }
-      ]
-    }
-  )
+resource "aws_iam_policy" "amazoneks_cni_ipv6_policy" {
+  name = "${var.cluster_name}-${var.node_group_name}-AmazonEKS_CNI_IPv6_Policy"
+  policy = jsonencode({
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "ec2:AssignIpv6Addresses",
+          "ec2:DescribeInstances",
+          "ec2:DescribeTags",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeInstanceTypes"
+        ],
+        "Resource": "*"
+      },
+      {
+        "Effect": "Allow",
+        "Action": [
+          "ec2:CreateTags"
+        ],
+        "Resource": [
+          "arn:aws:ec2:*:*:network-interface/*"
+        ]
+      }
+    ]
+  })
 }
 
-resource "aws_iam_role_policy_attachment" "ebs_csi_driver_encrypt_volume_policy" {
-  role = aws_iam_role.ebs_csi_controller_sa_role.name
-  policy_arn = aws_iam_policy.ebs_csi_driver_encrypt_volume_policy.arn
+resource "aws_iam_role_policy_attachment" "amazoneks_cni_ipv6_policy" {
+  role = aws_iam_role.eks_node_role.name
+  policy_arn = aws_iam_policy.amazoneks_cni_ipv6_policy.arn
 }
 ```
 
-## モジュールの出力値の定義
+### 起動テンプレート
 
-作成したIAMロールのARNを出力値として定義します。
+EKSクラスタのノードとして起動するEC2インスタンスの起動テンプレートを定義します。  
 
-`terraform/modules/addon/ebs-csi-driver/outputs.tf`
+
+`terraform/modules/node-group/bottlerocket/main.tf`
 
 ```tf
-output role_arn {
-  value = aws_iam_role.ebs_csi_controller_sa_role.arn
+resource "aws_launch_template" "node_instance" {
+  // 起動テンプレート: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/launch_template
+
+  name = "${var.cluster_name}-${var.node_group_name}-EKSNodeLaunchTemplate"
+
+  vpc_security_group_ids = [
+    var.cluster_security_group_id,
+  ]
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = 4
+      volume_type = "gp3"
+      encrypted = true
+      delete_on_termination = true
+    }
+  }
+  block_device_mappings {
+    device_name = "/dev/xvdb"
+    ebs {
+      volume_size = 64
+      volume_type = "gp3"
+      encrypted = true
+      delete_on_termination = true
+    }
+  }
+
+  monitoring {
+    enabled = true
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+
+    tags = {
+      Name = "${var.cluster_name}-${var.node_group_name}"
+    }
+  }
+
+  // base64エンコードされたユーザーデータを指定
+  // Bottlerocket Settings Reference: https://bottlerocket.dev/en/os/1.26.x/api/settings/
+  user_data = base64encode(templatefile(
+    "${path.module}/user-data.ini",
+    {
+      cluster_name = var.cluster_name
+      api_server = var.cluster_api_endpoint
+      cluster_certificate =  var.cluster_certificate
+    }
+  ))
 }
 ```
 
+ユーザーデータファイル
 
-# ■ addonコンポーネント
+`terraform/modules/node-group/bottlerocket/user-data.ini`
 
-以下のアドオンをインストールします。
+```ini
+[settings]
+[settings.kubernetes]
+cluster-name = '${cluster_name}'
+api-server = '${api_server}'
+cluster-certificate = '${cluster_certificate}'
+```
 
-- `eks-pod-identity-agent`
-- `aws-ebs-csi-driver`
-- `snapshot-controller`
+### ノードグループ
 
+ノードグループ本体を定義します。
+
+`terraform/modules/node-group/bottlerocket/main.tf`
+
+
+```tf
+resource "aws_eks_node_group" "this" {
+  // ノードグループ: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_node_group
+
+  node_group_name = var.node_group_name
+  // EKSクラスタ名
+  cluster_name    = var.cluster_name
+  // Kubernetesバージョン
+  version         = var.cluster_version
+  // ノードに付与するロール
+  node_role_arn   = aws_iam_role.eks_node_role.arn
+  // ノードを配置するサブネット
+  subnet_ids      = var.cluster_subnet_ids
+  // キャパシティタイプ(SPOT, ON_DEMAND)
+  capacity_type = "SPOT"  // スポット料金表: https://aws.amazon.com/jp/ec2/spot/pricing/
+  // インスタンスタイプ
+  instance_types = var.instance_types
+  // AMI: https://docs.aws.amazon.com/ja_jp/eks/latest/APIReference/API_Nodegroup.html#AmazonEKS-Type-Nodegroup-amiType
+  ami_type = var.ami_type
+
+  scaling_config {
+    desired_size = var.desired_size
+    max_size     = 10
+    min_size     = 1
+  }
+
+  // 起動テンプレートの指定
+  launch_template {
+    id = aws_launch_template.node_instance.id
+    version = aws_launch_template.node_instance.latest_version
+  }
+
+  update_config {
+    // ノード更新時に利用不可能になるノードの最大数
+    max_unavailable = 1
+  }
+
+  // ロールは作成済みだけど、ポリシーがアタッチされていない状況が発生するので、depends_on でポリシーのアタッチを待つ
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_node_policy,
+    aws_iam_role_policy_attachment.amazoneks_cni_ipv6_policy,
+  ]
+}
+```
+
+# ■ node-groupコンポーネント
+
+先ほど定義したnode-group-bottlerocketモジュールを呼び出し、EKSクラスタにノードグループを作成します。
 
 ## 変数定義
 
-`terraform/components/addon/variables.tf`
+必要な変数はclusterコンポーネントから参照します。
+
+`terraform/components/node-group/variables.tf`
 
 ```tf
 variable project_name {
@@ -161,6 +327,11 @@ variable tfstate_region {
 
 locals {
   cluster_name = data.terraform_remote_state.cluster.outputs.cluster_name
+  cluster_version = data.terraform_remote_state.cluster.outputs.version
+  cluster_security_group_id = data.terraform_remote_state.cluster.outputs.cluster_security_group_id
+  cluster_api_endpoint = data.terraform_remote_state.cluster.outputs.api_endpoint
+  cluster_certificate = data.terraform_remote_state.cluster.outputs.cluster_certificate
+  cluster_subnet_ids = data.terraform_remote_state.cluster.outputs.subnet_ids
 }
 
 data terraform_remote_state "cluster" {
@@ -172,20 +343,17 @@ data terraform_remote_state "cluster" {
     key    = "${var.project_name}/${var.stage}/cluster/terraform.tfstate"
   }
 }
-
 ```
 
 ## tfstateとプロバイダの設定
 
-`terraform/components/addon/main.tf`
+`terraform/components/node-group/main.tf`
 
 ```tf
 terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    region = "ap-northeast-1"
-    encrypt = true
   }
 
   required_providers {
@@ -208,119 +376,40 @@ provider "aws" {
 }
 ```
 
-## Pod Identity Agent
+## node-group-bottlerocketモジュールの呼び出し
 
-Pod Identity Agentのインストールを定義します。
+先ほど定義した node-group-bottlerocketモジュールを呼び出します。
 
-参考: [Amazon EKS Pod Identity エージェントのセットアップ | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/pod-id-agent-setup.html)
-
-最新バージョンは下記コマンドで確認します。
-
-```bash
-aws eks describe-addon-versions \
-  --addon-name eks-pod-identity-agent \
-  --query "addons[0].addonVersions[].addonVersion"
-```
-
-
-`terraform/components/addon/main.tf`
-
+`terraform/components/node-group/main.tf`
 
 ```tf
 /**
- * Pod Identity Agent
+ * ノードグループ
  */
-resource "aws_eks_addon" "eks_pod_identity_agent" {
-  // https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon
-
+module node_group_bottlerocket_1 {
+  source = "../../modules/node-group/bottlerocket"
   cluster_name = local.cluster_name
-  addon_name   = "eks-pod-identity-agent"
-  // バージョンの確認: aws eks describe-addon-versions --addon-name eks-pod-identity-agent
-  addon_version = "v1.3.4-eksbuild.1"
+  cluster_version = local.cluster_version
+  cluster_security_group_id = local.cluster_security_group_id
+  cluster_api_endpoint = local.cluster_api_endpoint
+  cluster_certificate = local.cluster_certificate
+  cluster_subnet_ids = local.cluster_subnet_ids
+  node_group_name = "ng-bottlerocket-1"
+  ami_type = "BOTTLEROCKET_x86_64"
+  instance_types = ["t3a.xlarge", "t3a.large", "t3a.medium"] // スポット料金: https://aws.amazon.com/jp/ec2/spot/pricing/
+  desired_size = 1
 }
 ```
 
-## EBS CSI Driver
-
-EBS CSI Driverのインストールを定義します。  
-ebs-csi-driverモジュールを呼び出してIAMロールを作成し、pod-identityの仕組みでサービスアカウントにIAMロールを紐づけます。  
-pod-identityの仕組みを利用する都合上、Pod Identity Agentのインストール後にインストールしなければならないので、depends_onに `aws_eks_addon.eks_pod_identity_agent` を設定します。
-
-参考: [Amazon EBS で Kubernetes ボリュームを保存する | AWS](https://docs.aws.amazon.com/ja_jp/eks/latest/userguide/ebs-csi.html)
-
-最新バージョンは下記コマンドで確認します。
-
-```bash
-aws eks describe-addon-versions \
-  --addon-name aws-ebs-csi-driver \
-  --query "addons[0].addonVersions[].addonVersion"
-```
-
-`terraform/components/addon/main.tf`
-
-
-```tf
-/**
- * EBS CSI Driver
- */
-module ebs_csi_driver {
-  source = "../../modules/addon/ebs-csi-driver"
-  cluster_name = local.cluster_name
-}
-
-resource "aws_eks_addon" "aws_ebs_csi_driver" {
-  cluster_name  = local.cluster_name
-  addon_name    = "aws-ebs-csi-driver"
-  // バージョンの確認: aws eks describe-addon-versions --addon-name aws-ebs-csi-driver
-  addon_version = "v1.37.0-eksbuild.1"
-  // Pod Identity に kube-system.ebs-csi-controller-sa に紐づけるIAMロールを指定
-  pod_identity_association {
-    role_arn = module.ebs_csi_driver.role_arn
-    service_account = "ebs-csi-controller-sa"
-  }
-
-  depends_on = [ aws_eks_addon.eks_pod_identity_agent ]
-}
-```
-
-## EBS CSI Snapshot Controller
-
-EBS CSI Snapshot Controllerのインストールを定義します。  
-
-参考: [Amazon EKS クラスターでアドオンを活用し、Amazon EBS スナップショットを永続ストレージに使用する: AWS](https://aws.amazon.com/jp/blogs/news/using-amazon-ebs-snapshots-for-persistent-storage-with-your-amazon-eks-cluster-by-leveraging-add-ons/)
-
-最新バージョンは下記コマンドで確認します。
-
-```bash
-aws eks describe-addon-versions \
-  --addon-name snapshot-controller \
-  --query "addons[0].addonVersions[].addonVersion"
-```
-
-`terraform/components/addon/main.tf`
-
-
-```tf
-/**
- * EBS CSI Snapshot Controller
- */
-resource "aws_eks_addon" "snapshot_controller" {
-  cluster_name  = local.cluster_name
-  addon_name    = "snapshot-controller"
-  // バージョンの確認: aws eks describe-addon-versions --addon-name snapshot-controller
-  addon_version = "v8.1.0-eksbuild.2"
-}
-```
-
-# ■ addon コンポーネントの入力変数ファイルの作成
+# ■ node-group コンポーネントの入力変数ファイルの作成
 
 共通変数(`terraform/components/tfvars/common.tfvars`)しか利用しないので、空のままでOK
 
-`terraform/components/addon/tfvars/dev.tfvars`
+`terraform/components/node-group/tfvars/dev.tfvars`
 
 # ■ terraformデプロイ
 
-terraformを実行してアドオンをインストールしましょう
+terraformを実行してEKSを作成してみましょう
 
 ```bash
 # プロジェクト名
@@ -328,7 +417,7 @@ PROJECT_NAME=プロジェクト名
 # ステージ名
 STAGE=dev
 # コンポーネント
-COMPONENT=addon
+COMPONENT=node-group
 
 # terraform plan: 作成されるリソース、現在との差分の確認
 # 実行後に .tfplan/network/plan.tfgraph ファイルが生成されるのでVSCodeで開いてみましょう。作成されるリソースの詳細を確認することができます。
