@@ -563,7 +563,7 @@ resource "aws_eks_access_policy_association" "admin" {
 
 他のコンポーネントから参照するための値を出力値として定義します。
 
-`terraform/components/network/outputs.tf`
+`terraform/components/cluster/outputs.tf`
 
 ```tf
 output "cluster_name" {
@@ -623,7 +623,7 @@ STAGE=dev
 COMPONENT=cluster
 
 # terraform plan: 作成されるリソース、現在との差分の確認
-# 実行後に .tfplan/network/plan.tfgraph ファイルが生成されるのでVSCodeで開いてみましょう。作成されるリソースの詳細を確認することができます。
+# 実行後に .tfplan/cluster/plan.tfgraph ファイルが生成されるのでVSCodeで開いてみましょう。作成されるリソースの詳細を確認することができます。
 make tf-plan PROJECT_NAME=$PROJECT_NAME STAGE=$STAGE COMPONENT=$COMPONENT
 
 # terraform apply: デプロイ
