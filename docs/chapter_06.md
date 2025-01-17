@@ -22,16 +22,16 @@ OSにBottlerocketを利用するノードグループを作成するモジュー
 
 モジュールを呼び出す際に指定する入力値の定義を行います
 
-`cluster_name` EKSクラスタ名
-`cluster_version` EKSクラスタのバージョン
-`cluster_security_group_id` EKSクラスタセキュリティグループ
-`cluster_api_endpoint` EKSクラスタのAPIエンドポイント
-`cluster_certificate` EKSクラスタとの通信に必要なBase64エンコードされた証明書
-`cluster_subnet_ids` EKSクラスタのサブネット
-`node_group_name` 任意のノードグループ名
-`ami_type` ノードのAMI。 `BOTTLEROCKET_ARM_64` `BOTTLEROCKET_x86_64` `BOTTLEROCKET_ARM_64_NVIDIA` `BOTTLEROCKET_x86_64_NVIDIA` から選択。
-`instance_types` ノードのインスタンスタイプ
-`desired_size` ノードの起動数
+- `cluster_name` EKSクラスタ名
+- `cluster_version` EKSクラスタのバージョン
+- `cluster_security_group_id` EKSクラスタセキュリティグループ
+- `cluster_api_endpoint` EKSクラスタのAPIエンドポイント
+- `cluster_certificate` EKSクラスタとの通信に必要なBase64エンコードされた証明書
+- `cluster_subnet_ids` EKSクラスタのサブネット
+- `node_group_name` 任意のノードグループ名
+- `ami_type` ノードのAMI。 `BOTTLEROCKET_ARM_64` `BOTTLEROCKET_x86_64` `BOTTLEROCKET_ARM_64_NVIDIA` `BOTTLEROCKET_x86_64_NVIDIA` から選択。
+- `instance_types` ノードのインスタンスタイプ
+- `desired_size` ノードの起動数
 
 
 `terraform/modules/node-group/bottlerocket/variables.tf`
