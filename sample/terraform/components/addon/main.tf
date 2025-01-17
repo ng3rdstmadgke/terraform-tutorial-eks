@@ -2,8 +2,6 @@ terraform {
   required_version = "~> 1.10"
 
   backend "s3" {
-    region = "ap-northeast-1"
-    encrypt = true
   }
 
   required_providers {
