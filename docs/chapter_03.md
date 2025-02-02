@@ -185,6 +185,7 @@ tf-validate: tf-init  ## terraform validate
 .PHONY: tf-init
 tf-init: option-parser ## terraform init
 	terraform -chdir=$(COMPONENT_DIR) init \
+	  -upgrade \
 	  -reconfigure \
 	  -backend-config $(COMMON_BACKEND_CONFIG) \
 	  -backend-config "key=$(PROJECT_NAME)/$(STAGE)/$(COMPONENT)/terraform.tfstate"
