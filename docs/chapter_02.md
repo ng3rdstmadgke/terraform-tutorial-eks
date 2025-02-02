@@ -313,29 +313,11 @@ aws s3api create-bucket \
 
 ```
 
-## tfstateロック用のDynamoDBテーブルを作成
-
-terraformを複数個所から同時にデプロイできないように、dynamoDBにtfstateをロックするためのテーブルを作成します。
-
-```bash
-# tfstateファイルのロック情報をDynamoDBで管理する
-# https://developer.hashicorp.com/terraform/language/settings/backends/s3#dynamodb-state-locking
-
-TFSTATE_LOCK_TABLE="terraform-tutorial-eks-tfstate-lock"
-
-aws dynamodb create-table \
-    --table-name $TFSTATE_LOCK_TABLE \
-    --attribute-definitions AttributeName=LockID,AttributeType=S \
-    --key-schema AttributeName=LockID,KeyType=HASH \
-    --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
-    --region ap-northeast-1
-```
-
 ## tfstate保存先を指定するための変数ファイルを作成
 
 ※ `EDIT: ...` コメントの項目を各自編集してください
 
-tfstateの保存先バケットとロックのためのDynamoDBテーブルはコンポーネント間で共通なので、共通して利用する変数ファイルに定義します。
+tfstateの保存先バケットはコンポーネント間で共通なので、共通して利用する変数ファイルに定義します。
 
 
 `terraform/components/tfvars/backend.tfvars`
@@ -344,8 +326,8 @@ tfstateの保存先バケットとロックのためのDynamoDBテーブルは�
 region         = "ap-northeast-1"
 # tfstateの保存先バケット
 bucket         = "tfstateの保存先バケット"  # EDIT: tfstateファイル保存用に作成したS3バケット名を指定
-# tfstateのロック情報を管理するDynamoDB
-dynamodb_table = "terraform-tutorial-eks-tfstate-lock"
+# tfstateのロック
+use_lockfile  = true
 # tfstateの暗号化
 encrypt = true
 ```
